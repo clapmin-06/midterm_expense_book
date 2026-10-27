@@ -25,13 +25,42 @@ function el(tag, cls, text) {
 }
 const today = () => new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10);
 
+// 서버가 알려준 로그인 방식(/api/me): 구글 로그인 / 개발용 비밀번호 로그인
+let auth = { googleEnabled: false, passwordLogin: false, user: null };
+const LOGIN_ERRORS = {
+  denied: '구글 로그인이 취소되었어요.',
+  state: '로그인 요청이 만료되었어요. 다시 시도해 주세요.',
+  failed: '구글 로그인에 실패했어요. 잠시 후 다시 시도해 주세요.',
+  config: '구글 로그인이 아직 설정되지 않았어요.',
+};
 function showLogin() {
   $('app').classList.add('hidden');
   $('login').classList.remove('hidden');
+  $('google-login').classList.toggle('hidden', !auth.googleEnabled);
+  $('login-form').classList.toggle('hidden', !auth.passwordLogin);
+  $('login-note').classList.toggle('hidden', auth.googleEnabled || auth.passwordLogin);
 }
 function showApp() {
   $('login').classList.add('hidden');
   $('app').classList.remove('hidden');
+  // 상단 프로필: 구글 프로필 사진(없으면 이름 첫 글자)
+  const me = $('me');
+  const u = auth.user;
+  me.replaceChildren();
+  me.classList.toggle('hidden', !u);
+  if (u) {
+    me.title = u.email || u.name || '';
+    if (u.picture) {
+      const img = el('img');
+      img.src = u.picture;
+      img.alt = '';
+      img.referrerPolicy = 'no-referrer';
+      img.onerror = () => { img.remove(); me.append([...(u.name || '?')][0]); };
+      me.append(img);
+    } else {
+      me.append([...(u.name || '?')][0]);
+    }
+  }
   refresh();
 }
 
@@ -556,6 +585,7 @@ $('login-form').addEventListener('submit', async (e) => {
   e.preventDefault();
   try {
     await api('/login', { method: 'POST', body: { password: $('password').value } });
+    auth = await api('/me'); // 로그인한 사용자 정보(프로필) 갱신
     $('password').value = '';
     $('login-error').textContent = '';
     showApp();
@@ -568,4 +598,13 @@ $('logout').onclick = async () => {
   showLogin();
 };
 
-api('/me').then((d) => (d.authed ? showApp() : showLogin()));
+api('/me').then((d) => {
+  auth = d;
+  // 구글 로그인에서 돌아왔을 때 실패 사유가 주소에 붙어 있으면 보여주고 주소를 깨끗이 정리
+  const code = new URLSearchParams(location.search).get('login_error');
+  if (code) {
+    history.replaceState(null, '', location.pathname);
+    if (!d.authed) $('login-error').textContent = LOGIN_ERRORS[code] || LOGIN_ERRORS.failed;
+  }
+  d.authed ? showApp() : showLogin();
+});
