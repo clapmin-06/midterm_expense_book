@@ -118,8 +118,18 @@
       <label>이벤트 이름
         <input type="text" id="en-name" placeholder="예: 제주도 여행" maxlength="50" required>
       </label>
+      <div class="emoji-field">
+        <span class="lbl">이모티콘</span>
+        <input type="hidden" id="en-emoji">
+        <button type="button" class="sel-btn emoji-btn" id="en-emoji-btn">
+          <span class="emoji-show" id="en-emoji-show">🧳</span><span class="emoji-hint" id="en-emoji-hint">자동 추천</span>
+        </button>
+      </div>
       <label>카테고리
-        <select id="en-category" required></select>
+        <div class="row-gap">
+          <select id="en-category" required></select>
+          <button type="button" id="en-cat-manage" class="chip">관리</button>
+        </div>
       </label>
       <label>시작일
         <input type="date" id="en-start" required>
@@ -145,8 +155,18 @@
       <label>이벤트 이름
         <input type="text" id="ev-name" maxlength="50" required>
       </label>
+      <div class="emoji-field">
+        <span class="lbl">이모티콘</span>
+        <input type="hidden" id="ev-emoji">
+        <button type="button" class="sel-btn emoji-btn" id="ev-emoji-btn">
+          <span class="emoji-show" id="ev-emoji-show">🧳</span><span class="emoji-hint" id="ev-emoji-hint">자동 추천</span>
+        </button>
+      </div>
       <label>카테고리
-        <select id="ev-category" required></select>
+        <div class="row-gap">
+          <select id="ev-category" required></select>
+          <button type="button" id="ev-cat-manage" class="chip">관리</button>
+        </div>
       </label>
       <div class="row-gap dates">
         <label>시작일 <input type="date" id="ev-start" required></label>
@@ -240,6 +260,13 @@
     </form>
     <p id="cat-error" class="error"></p>
     <div id="cat-list" class="rows"></div>
+  </dialog>
+
+  <!-- 이모티콘 선택 시트 (이벤트) -->
+  <dialog id="emoji-dialog" class="sheet pick">
+    <h2 class="pick-title">이모티콘 선택</h2>
+    <div id="emoji-grid"></div>
+    <button type="button" id="emoji-auto" class="wide">이름에 맞게 자동 추천</button>
   </dialog>
 
   <!-- 선택 목록 시트 (카테고리, 기간 선택 등) -->

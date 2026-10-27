@@ -10,10 +10,14 @@ const SESSION_SECRET = process.env.SESSION_SECRET || APP_PASSWORD || '';
 const GOOGLE_ENABLED = !!(GOOGLE_CLIENT_ID && GOOGLE_CLIENT_SECRET);
 // 비밀번호 로그인은 구글 설정이 없을 때만 켜지는 개발용(로컬 테스트용) 로그인
 const PASSWORD_LOGIN = !GOOGLE_ENABLED && !!APP_PASSWORD;
-const AUTH_READY = !!SESSION_SECRET && (GOOGLE_ENABLED || PASSWORD_LOGIN);
+// 실서비스(구글 로그인)에서는 추측하기 어려운 32자 이상의 키만 허용. 개발용 비밀번호 로그인은 제한 없음
+const SECRET_OK = GOOGLE_ENABLED ? SESSION_SECRET.length >= 32 : !!SESSION_SECRET;
+const AUTH_READY = SECRET_OK && (GOOGLE_ENABLED || PASSWORD_LOGIN);
 
 if (!DATABASE_URL) console.error('DATABASE_URL 환경변수가 필요합니다.');
-if (!AUTH_READY) {
+if (GOOGLE_ENABLED && !SECRET_OK) {
+  console.error('SESSION_SECRET 은 32자 이상의 임의 문자열이어야 합니다. (예: node -e "console.log(require(\'crypto\').randomBytes(32).toString(\'hex\'))")');
+} else if (!AUTH_READY) {
   console.error('로그인 설정이 없습니다. GOOGLE_CLIENT_ID/GOOGLE_CLIENT_SECRET/SESSION_SECRET (또는 개발용 APP_PASSWORD)를 설정하세요.');
 } else if (PASSWORD_LOGIN) {
   console.warn('구글 로그인이 설정되지 않아 개발용 비밀번호 로그인을 사용합니다. (모든 사람이 같은 계정을 공유)');
@@ -80,6 +84,7 @@ const SCHEMA = `
   CREATE INDEX IF NOT EXISTS expenses_event_idx ON expenses (event_id);
   CREATE INDEX IF NOT EXISTS events_user_idx ON events (user_id);
   CREATE INDEX IF NOT EXISTS recurring_user_next_idx ON recurring (user_id, next_date);
+  ALTER TABLE events ADD COLUMN IF NOT EXISTS emoji TEXT;
 `;
 
 const DEFAULT_CATEGORIES = {
@@ -150,7 +155,8 @@ async function upsertUser({ sub, email, name, picture }) {
 
 // ---- 세션: 서버리스에서도 동작하도록 서명된 무상태 쿠키 (사용자 id + 만료 시각) ----
 const COOKIE = 'auth';
-const MAX_AGE = 60 * 60 * 24 * 7; // 7일
+const MAX_AGE = 60 * 60 * 24 * 30; // 30일 (사용할 때마다 연장되므로, 마지막 사용 후 30일간 로그인 유지)
+const RENEW_AFTER = 60 * 60 * 24; // 발급 후 1일이 지난 세션만 다시 발급 (요청마다 쿠키를 바꾸지 않도록)
 const IS_PROD = !!(process.env.VERCEL || process.env.NODE_ENV === 'production');
 const SECURE = IS_PROD ? '; Secure' : '';
 
@@ -172,27 +178,50 @@ function getCookie(req, name) {
   }
   return null;
 }
-// 로그인된 사용자 id (없거나 위조/만료면 null)
-function sessionUserId(req) {
+// 세션 쿠키 검증: 올바르게 서명되고 만료되지 않았으면 { uid, exp }, 아니면 null (위조/만료)
+function readSession(req) {
   if (!AUTH_READY) return null;
   const token = getCookie(req, COOKIE);
   if (!token) return null;
   const [uid, exp, sig] = token.split('.');
-  if (!uid || !exp || !sig || !/^\d+$/.test(uid) || Number(exp) < Date.now()) return null;
-  return safeEqual(sig, sign(`${uid}.${exp}`)) ? Number(uid) : null;
+  if (!uid || !exp || !sig || !/^\d+$/.test(uid) || !/^\d+$/.test(exp) || Number(exp) < Date.now()) return null;
+  return safeEqual(sig, sign(`${uid}.${exp}`)) ? { uid: Number(uid), exp: Number(exp) } : null;
 }
 function setSession(res, userId) {
   res.append('Set-Cookie', `${COOKIE}=${encodeURIComponent(makeToken(userId))}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${MAX_AGE}${SECURE}`);
 }
-function requireAuth(req, res, next) {
-  const uid = sessionUserId(req);
-  if (!uid) return res.status(401).json({ error: '인증이 필요합니다.' });
-  req.userId = uid;
-  next();
+const clearSession = (res) => res.append('Set-Cookie', `${COOKIE}=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0${SECURE}`);
+// 사용 중이면 만료일을 30일 뒤로 연장
+function renewSession(res, s) {
+  if (s.exp - Date.now() < (MAX_AGE - RENEW_AFTER) * 1000) setSession(res, s.uid);
+}
+// 로그인 확인 + 사용자가 아직 존재하는지 확인 (계정이 삭제되면 남아 있는 세션도 즉시 무효)
+async function requireAuth(req, res, next) {
+  try {
+    const s = readSession(req);
+    if (!s) return res.status(401).json({ error: '인증이 필요합니다.' });
+    await initDb();
+    const u = await pool.query('SELECT 1 FROM users WHERE id = $1', [s.uid]);
+    if (!u.rowCount) { clearSession(res); return res.status(401).json({ error: '인증이 필요합니다.' }); }
+    req.userId = s.uid;
+    renewSession(res, s);
+    next();
+  } catch (e) { next(e); }
 }
 
 const app = express();
 app.disable('x-powered-by');
+// 기본 보안 헤더 (Vercel 정적 파일에는 vercel.json 의 headers 가 같은 값을 적용)
+app.use((req, res, next) => {
+  res.set({
+    'X-Content-Type-Options': 'nosniff',
+    'X-Frame-Options': 'DENY',
+    'Referrer-Policy': 'strict-origin-when-cross-origin',
+  });
+  next();
+});
+// 개인 데이터가 담긴 API 응답은 브라우저/중간 서버에 저장하지 않음
+app.use('/api', (req, res, next) => { res.set('Cache-Control', 'no-store'); next(); });
 app.use(express.json());
 // 화면 파일은 매번 최신본인지 확인하게 해서, 수정 후 예전 코드가 캐시로 남지 않도록 함
 app.use(express.static(path.join(__dirname, 'public'), {
@@ -289,11 +318,12 @@ app.post('/api/logout', (req, res) => {
 app.get('/api/me', async (req, res, next) => {
   try {
     const info = { authed: false, googleEnabled: GOOGLE_ENABLED && AUTH_READY, passwordLogin: PASSWORD_LOGIN && AUTH_READY };
-    const uid = sessionUserId(req);
-    if (uid) {
+    const s = readSession(req);
+    if (s) {
       await initDb();
-      const r = await pool.query('SELECT name, email, picture FROM users WHERE id = $1', [uid]);
-      if (r.rowCount) { info.authed = true; info.user = r.rows[0]; }
+      const r = await pool.query('SELECT name, email, picture FROM users WHERE id = $1', [s.uid]);
+      if (r.rowCount) { info.authed = true; info.user = r.rows[0]; renewSession(res, s); }
+      else clearSession(res);
     }
     res.json(info);
   } catch (e) { next(e); }
@@ -393,7 +423,7 @@ api.get('/expenses', async (req, res, next) => {
     if (to) { params.push(to); where.push(`date <= $${params.length}`); }
     if (month) { params.push(month + '-01'); where.push(`date_trunc('month', date) = $${params.length}::date`); }
     if (q) { params.push(likePattern(q)); where.push(`x.item ILIKE $${params.length} ESCAPE '\\'`); }
-    const sql = `SELECT x.id, to_char(x.date,'YYYY-MM-DD') AS date, x.item, x.category, x.amount, x.kind, x.event_id, ev.name AS event_name,
+    const sql = `SELECT x.id, to_char(x.date,'YYYY-MM-DD') AS date, x.item, x.category, x.amount, x.kind, x.event_id, ev.name AS event_name, ev.emoji AS event_emoji,
                         x.recurring_id, rc.interval_months, rc.day_of_month
                  FROM expenses x LEFT JOIN recurring rc ON rc.id = x.recurring_id
                  LEFT JOIN events ev ON ev.id = x.event_id
@@ -507,12 +537,17 @@ function validateEvent(body) {
     if (!DATE_RE.test(d || '') || isNaN(Date.parse(d))) return '날짜 형식이 올바르지 않습니다.';
   }
   if (end_date < start_date) return '종료일은 시작일 이후여야 합니다.';
+  const emoji = body.emoji;
+  if (emoji !== undefined && emoji !== null && emoji !== '' &&
+      (typeof emoji !== 'string' || emoji.length > 16 || !/^\p{Extended_Pictographic}/u.test(emoji))) return '이모티콘 형식이 올바르지 않습니다.';
   return null;
 }
+// 이벤트 이모티콘 (비어 있으면 null = 화면에서 이름/카테고리로 자동 추천)
+const emojiOf = (body) => (typeof body.emoji === 'string' && body.emoji.trim() ? body.emoji.trim() : null);
 
 // 이벤트 + 순합계(수입-지출, 부호 포함)/건수 ($1: 날짜(없으면 null) -> 그 날짜의 합계 day_total, $2: 사용자 id)
 const EVENT_SELECT = `
-  SELECT e.id, e.name, e.category, to_char(e.start_date,'YYYY-MM-DD') AS start_date, to_char(e.end_date,'YYYY-MM-DD') AS end_date,
+  SELECT e.id, e.name, e.category, e.emoji, to_char(e.start_date,'YYYY-MM-DD') AS start_date, to_char(e.end_date,'YYYY-MM-DD') AS end_date,
          COALESCE(SUM(CASE WHEN x.kind = 'income' THEN x.amount ELSE -x.amount END),0)::bigint AS total, COUNT(x.id)::int AS count,
          COALESCE(SUM(CASE WHEN x.kind = 'income' THEN x.amount ELSE -x.amount END) FILTER (WHERE x.date = $1::date),0)::bigint AS day_total
   FROM events e LEFT JOIN expenses x ON x.event_id = e.id AND x.user_id = e.user_id`;
@@ -549,9 +584,9 @@ api.post('/events', async (req, res, next) => {
     if (err) return res.status(400).json({ error: err });
     const { name, category, start_date, end_date } = req.body;
     const r = await pool.query(
-      `INSERT INTO events (user_id, name, category, start_date, end_date) VALUES ($1,$2,$3,$4,$5)
-       RETURNING id, name, category, to_char(start_date,'YYYY-MM-DD') AS start_date, to_char(end_date,'YYYY-MM-DD') AS end_date`,
-      [req.userId, name.trim(), category.trim(), start_date, end_date]);
+      `INSERT INTO events (user_id, name, category, start_date, end_date, emoji) VALUES ($1,$2,$3,$4,$5,$6)
+       RETURNING id, name, category, emoji, to_char(start_date,'YYYY-MM-DD') AS start_date, to_char(end_date,'YYYY-MM-DD') AS end_date`,
+      [req.userId, name.trim(), category.trim(), start_date, end_date, emojiOf(req.body)]);
     res.status(201).json(r.rows[0]);
   } catch (e) { next(e); }
 });
@@ -571,9 +606,9 @@ api.put('/events/:id', async (req, res, next) => {
       return res.status(409).json({ error: `새 기간 밖의 지출/수입이 ${out.rows[0].n}건 있습니다. 해당 내역의 날짜를 먼저 수정하세요.` });
     }
     const r = await pool.query(
-      `UPDATE events SET name=$1, category=$2, start_date=$3, end_date=$4 WHERE id=$5 AND user_id=$6
-       RETURNING id, name, category, to_char(start_date,'YYYY-MM-DD') AS start_date, to_char(end_date,'YYYY-MM-DD') AS end_date`,
-      [name.trim(), category.trim(), start_date, end_date, id, uid]);
+      `UPDATE events SET name=$1, category=$2, start_date=$3, end_date=$4, emoji=$7 WHERE id=$5 AND user_id=$6
+       RETURNING id, name, category, emoji, to_char(start_date,'YYYY-MM-DD') AS start_date, to_char(end_date,'YYYY-MM-DD') AS end_date`,
+      [name.trim(), category.trim(), start_date, end_date, id, uid, emojiOf(req.body)]);
     if (!r.rowCount) return res.status(404).json({ error: '이벤트를 찾을 수 없습니다.' });
     res.json(r.rows[0]);
   } catch (e) { next(e); }

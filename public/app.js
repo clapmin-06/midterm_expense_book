@@ -50,7 +50,7 @@ function showApp() {
   me.classList.toggle('hidden', !u);
   if (u) {
     me.title = u.email || u.name || '';
-    if (u.picture) {
+    if (u.picture && /^https:\/\//.test(u.picture)) {
       const img = el('img');
       img.src = u.picture;
       img.alt = '';
@@ -110,7 +110,7 @@ async function loadList() {
     const left = el('div', 'left');
     left.append(el('div', 'name', ev.name), el('div', 'cat', `${ev.category} · ${ev.start_date} ~ ${ev.end_date} · ${ev.count}건`));
     evBox.append(itemRow('event', left, el('div', 'amt' + (ev.total > 0 ? ' pos' : ''), signed(ev.total)),
-      () => openEvent(ev.id), () => deleteEvent(ev), ev.name, eventAvatarEl()));
+      () => openEvent(ev.id), () => deleteEvent(ev), ev.name, eventAvatarEl(ev)));
   }
 
   let group = null;
@@ -135,7 +135,7 @@ async function loadList() {
     const left = el('div', 'left');
     const sub = el('div', 'cat');
     // 이벤트 안의 내역(검색 결과)은 이벤트 이름을 파란 배지로 표시해 일반 내역과 구분
-    if (r.event_id) sub.append(el('span', 'ev-tag', `🧳 ${r.event_name}`));
+    if (r.event_id) sub.append(el('span', 'ev-tag', `${eventEmoji({ emoji: r.event_emoji, name: r.event_name })} ${r.event_name}`));
     sub.append(r.category + (r.recurring_id ? ' · 정기' : ''));
     left.append(el('div', 'name', r.item), sub);
     wrap.append(itemRow('', left, amountEl(r), () => (r.event_id ? openEventExpense(r) : openForm(r)), () => deleteExpense(r), r.item, logoAvatarEl()));
@@ -195,7 +195,7 @@ async function deleteEvent(ev) {
 }
 
 // 목록의 그림 자리: 글자 대신 돈비 로고 마크를 연한 파랑 원 안에 표시 (시안의 "목록" 규격).
-// 이벤트는 🧳 로 구분
+// 이벤트는 이름/카테고리에 어울리는 이모티콘 그림으로 구분 (직접 고른 게 있으면 그것을 사용)
 function logoAvatarEl() {
   const a = el('span', 'avatar');
   const m = el('span', 'mk');
@@ -203,8 +203,27 @@ function logoAvatarEl() {
   a.append(m);
   return a;
 }
-function eventAvatarEl() {
-  return el('span', 'avatar ev', '🧳');
+const EMOJI_RULES = [
+  [/제주|감귤|한라/, '🍊'], [/비행기|항공|공항|출국|해외/, '✈️'], [/기차|ktx|열차/, '🚆'], [/렌트|드라이브|자동차|차박/, '🚗'],
+  [/바다|해변|해수욕|휴가|워터|리조트|섬/, '🏖️'], [/캠핑|글램핑/, '⛺'], [/등산|산행|트레킹|설악|한라산/, '🏔️'], [/스키|스노보드/, '⛷️'],
+  [/일본|도쿄|오사카|교토|후쿠오카|유럽|파리|런던|에펠/, '🗼'], [/미국|뉴욕|하와이/, '🗽'],
+  [/졸업|입학|개강|종강|학기|시험/, '🎓'], [/생일|파티/, '🎂'], [/결혼|웨딩|청첩|신혼/, '💒'], [/이사|입주|집들이/, '📦'],
+  [/크리스마스|성탄/, '🎄'], [/설날|추석|명절|한가위|귀향/, '🌕'], [/연말|송년|새해|신년|불꽃/, '🎉'],
+  [/회식|술자리|소주|맥주|치맥|한잔|모임|뒤풀이/, '🍻'], [/맛집|식사|저녁|점심|브런치|뷔페|먹/, '🍽️'], [/카페|커피/, '☕'],
+  [/쇼핑|세일|블프|구매|장보기/, '🛍️'], [/병원|수술|건강|치료|검진/, '🏥'], [/운동|헬스|러닝|마라톤|요가/, '🏋️'],
+  [/콘서트|공연|페스티벌|축제|뮤지컬|연극/, '🎤'], [/영화|시사회/, '🎬'], [/게임|오락/, '🎮'], [/데이트|기념일|연애|커플/, '💕'],
+  [/반려|강아지|고양이|펫/, '🐶'], [/출산|육아|아기|돌잔치/, '👶'], [/여행|trip|투어|관광/, '🧳'],
+];
+const EMOJI_BY_CATEGORY = { 식비: '🍽️', 교통: '🚗', 쇼핑: '🛍️', '주거/통신': '🏠', '문화/여가': '🎭', 의료: '🏥', 교육: '📚' };
+// 이름 -> 카테고리 순으로 어울리는 이모티콘을 고르고, 없으면 여행 가방
+function autoEmoji(name, category) {
+  const text = String(name || '').toLowerCase();
+  for (const [re, emoji] of EMOJI_RULES) if (re.test(text)) return emoji;
+  return EMOJI_BY_CATEGORY[category] || '🧳';
+}
+const eventEmoji = (ev) => ev.emoji || autoEmoji(ev.name, ev.category);
+function eventAvatarEl(ev) {
+  return el('span', 'avatar ev', eventEmoji(ev));
 }
 
 function amountEl(r) {
@@ -275,9 +294,14 @@ async function loadCategories(selected) {
         const next = input.value.trim();
         if (!next || next === n) { loadCategories(); return; }
         try {
+          const selIds = ['f-category', 'en-category', 'ev-category'].filter(
+            (id) => $(id).value === n && (id === 'f-category' ? $('kind-seg').dataset.kind === catKind : catKind === 'expense'));
           await api('/categories/' + encodeURIComponent(n), { method: 'PUT', body: { name: next, kind: catKind } });
           $('cat-error').textContent = '';
-          await loadCategories(next);
+          await loadCategories();
+          for (const id of selIds) $(id).value = next;
+          refreshEmojiField('en');
+          refreshEmojiField('ev');
           loadList();
           loadSummaries();
         } catch (err) {
@@ -405,6 +429,8 @@ function openEventNew() {
   $('event-new-form').reset();
   $('en-error').textContent = '';
   $('en-start').value = $('en-end').value = today();
+  $('en-emoji').value = '';
+  refreshEmojiField('en');
   $('event-new-dialog').showModal();
   $('en-name').focus();
 }
@@ -423,7 +449,7 @@ $('event-new-form').addEventListener('submit', async (e) => {
   try {
     await api('/events', {
       method: 'POST',
-      body: { name: $('en-name').value, category: $('en-category').value, start_date: $('en-start').value, end_date: $('en-end').value },
+      body: { name: $('en-name').value, category: $('en-category').value, emoji: $('en-emoji').value || null, start_date: $('en-start').value, end_date: $('en-end').value },
     });
     $('event-new-dialog').close();
     refresh();
@@ -431,6 +457,18 @@ $('event-new-form').addEventListener('submit', async (e) => {
     $('en-error').textContent = err.message;
   }
 });
+
+// 이벤트 이모티콘 입력칸: 값이 비어 있으면 이름/카테고리로 자동 추천한 이모티콘을 미리 보여줌
+function refreshEmojiField(p) { // p: 'en'(추가) | 'ev'(수정)
+  const v = $(p + '-emoji').value;
+  $(p + '-emoji-show').textContent = v || autoEmoji($(p + '-name').value, $(p + '-category').value);
+  $(p + '-emoji-hint').textContent = v ? '직접 선택' : '자동 추천';
+}
+for (const p of ['en', 'ev']) {
+  $(p + '-name').addEventListener('input', () => refreshEmojiField(p));
+  $(p + '-category').addEventListener('change', () => refreshEmojiField(p));
+  $(p + '-emoji-btn').onclick = () => openEmojiPicker($(p + '-emoji').value, (v) => { $(p + '-emoji').value = v; refreshEmojiField(p); });
+}
 
 // 이벤트 상세/수정: 이름·기간 수정 + 이벤트의 지출 추가/수정
 let currentEvent = null;
@@ -440,6 +478,8 @@ async function loadEvent(id) {
   $('ev-id').value = ev.id;
   $('ev-name').value = ev.name;
   $('ev-category').value = ev.category;
+  $('ev-emoji').value = ev.emoji || '';
+  refreshEmojiField('ev');
   $('ev-start').value = ev.start_date;
   $('ev-end').value = ev.end_date;
   $('ev-count').textContent = `${ev.count}건`;
@@ -481,7 +521,7 @@ $('event-edit-form').addEventListener('submit', async (e) => {
   try {
     await api('/events/' + $('ev-id').value, {
       method: 'PUT',
-      body: { name: $('ev-name').value, category: $('ev-category').value, start_date: $('ev-start').value, end_date: $('ev-end').value },
+      body: { name: $('ev-name').value, category: $('ev-category').value, emoji: $('ev-emoji').value || null, start_date: $('ev-start').value, end_date: $('ev-end').value },
     });
     $('ev-error').textContent = '';
     await loadEvent($('ev-id').value);
@@ -548,12 +588,15 @@ $('f-delete').onclick = async () => {
 };
 
 // ---- 카테고리 관리 시트 ----
-$('cat-manage-toggle').onclick = async () => {
-  catKind = $('kind-seg').dataset.kind; // 지금 보고 있는 지출/수입 종류의 카테고리를 관리
+async function openCatManage(kind) {
+  catKind = kind;
   $('cat-error').textContent = '';
   await loadCategories().catch(() => {});
   $('cat-dialog').showModal();
-};
+}
+// 지출/수입 폼: 지금 보고 있는 종류의 카테고리를 관리. 이벤트 폼: 이벤트는 지출 카테고리를 그대로 쓰므로 지출 카테고리를 관리
+$('cat-manage-toggle').onclick = () => openCatManage($('kind-seg').dataset.kind);
+$('en-cat-manage').onclick = $('ev-cat-manage').onclick = () => openCatManage('expense');
 $('cat-close').onclick = () => $('cat-dialog').close();
 $('cat-add-form').addEventListener('submit', async (e) => {
   e.preventDefault();

@@ -106,6 +106,29 @@ function enhanceSelect(sel, title) {
   sync();
 }
 
+// 이모티콘 선택 시트: 격자에서 고르거나 "자동 추천"(빈 값)으로 되돌림
+const EMOJI_CHOICES = ['✈️', '🧳', '🏖️', '🏝️', '⛺', '🏔️', '⛷️', '🚗', '🚆', '🚢', '🗼', '🗽', '🍊', '🍽️', '🍻', '☕',
+  '🎂', '🎉', '🎁', '💒', '💕', '🎓', '📚', '🏠', '📦', '🏥', '💊', '🏋️', '⚽', '🎤', '🎬', '🎮',
+  '🎭', '🛍️', '🎄', '🌸', '🌕', '🎡', '🐶', '👶', '🔧', '💼', '💻', '🌏'];
+function openEmojiPicker(current, onPick) {
+  const dlg = byId('emoji-dialog');
+  const grid = byId('emoji-grid');
+  grid.replaceChildren();
+  const done = (v) => { onPick(v); dlg.close(); };
+  for (const e of EMOJI_CHOICES) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'emoji-cell' + (e === current ? ' on' : '');
+    b.textContent = e;
+    b.setAttribute('aria-label', e);
+    b.onclick = () => done(e);
+    grid.append(b);
+  }
+  byId('emoji-auto').onclick = () => done('');
+  dlg.showModal();
+}
+byId('emoji-dialog').addEventListener('click', (e) => { if (e.target === e.currentTarget) e.currentTarget.close(); });
+
 enhanceSelect(byId('f-category'), '카테고리');
 enhanceSelect(byId('en-category'), '카테고리');
 enhanceSelect(byId('ev-category'), '카테고리');
