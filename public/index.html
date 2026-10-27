@@ -1,0 +1,243 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#f2f4f6">
+  <title>가계부</title>
+  <!-- 글꼴: Pretendard (불러오지 못하면 시스템 글꼴로 대체됨) -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <section id="login" class="hidden">
+    <h1>가계부</h1>
+    <p class="login-sub">비밀번호를 입력해 주세요</p>
+    <form id="login-form">
+      <input type="password" id="password" placeholder="비밀번호" autocomplete="current-password" required>
+      <button type="submit" class="primary">로그인</button>
+    </form>
+    <p id="login-error" class="error"></p>
+  </section>
+
+  <div id="app" class="hidden">
+    <header class="topbar">
+      <h1>가계부</h1>
+      <button id="logout" class="text-btn">로그아웃</button>
+    </header>
+
+    <!-- 내역 탭 -->
+    <main id="tab-list" class="tab">
+      <div class="month-total card">
+        <span class="muted" id="list-label">전체</span>
+        <strong id="list-total">0원</strong>
+      </div>
+      <div class="filter-row">
+        <div class="search-box">
+          <input type="search" id="s-q" placeholder="이름으로 검색" maxlength="100" aria-label="이름으로 검색" enterkeyhint="search">
+          <button type="button" id="s-q-x" class="q-clear hidden" aria-label="검색어 지우기">✕</button>
+          <!-- 달력 버튼 위에 투명한 날짜 입력을 겹쳐, 누르면 브라우저 날짜 선택창이 바로 열림 -->
+          <span class="cal-btn" id="s-cal" title="날짜 선택">
+            <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <rect x="3" y="5" width="18" height="16" rx="3"></rect><path d="M3 10h18M8 3v4M16 3v4"></path>
+            </svg>
+            <input type="date" id="s-date" aria-label="날짜로 검색">
+          </span>
+        </div>
+        <button id="s-clear" class="chip">전체</button>
+      </div>
+      <div id="s-date-tag" class="date-tag hidden">
+        <span id="s-date-text"></span>
+        <button type="button" id="s-date-x" aria-label="날짜 검색 해제">✕</button>
+      </div>
+      <div id="events" class="hidden">
+        <div class="day-head"><span>이벤트</span></div>
+        <div id="event-list"></div>
+      </div>
+      <div id="list"></div>
+      <p id="empty" class="muted center hidden">내역이 없습니다.</p>
+    </main>
+
+    <!-- 통계 탭 -->
+    <main id="tab-stats" class="tab hidden">
+      <section class="card stat-card" id="st-month"></section>
+      <section class="card stat-card" id="st-year"></section>
+      <section class="card stat-card" id="st-all"></section>
+    </main>
+
+    <button id="fab" class="fab" aria-label="지출/수입 추가">
+      <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+    </button>
+
+    <!-- 떠 있는 알약 모양 탭바 -->
+    <nav class="tabbar">
+      <button data-tab="list" class="active">
+        <svg viewBox="0 0 24 24" width="26" height="26" fill="currentColor" aria-hidden="true"><path d="M11.1 3.3a1.4 1.4 0 0 1 1.8 0l7.4 6.1c.4.3.7.8.7 1.4v7.6A2.6 2.6 0 0 1 18.4 21H15a.8.8 0 0 1-.8-.8v-4.4a.8.8 0 0 0-.8-.8h-2.8a.8.8 0 0 0-.8.8v4.4a.8.8 0 0 1-.8.8H5.6A2.6 2.6 0 0 1 3 18.4v-7.6c0-.6.3-1.1.7-1.4l7.4-6.1Z"/></svg>
+        <span>내역</span>
+      </button>
+      <button data-tab="stats">
+        <svg viewBox="0 0 24 24" width="26" height="26" fill="currentColor" aria-hidden="true"><rect x="4" y="11" width="4.5" height="9" rx="1.6"/><rect x="9.75" y="4" width="4.5" height="16" rx="1.6"/><rect x="15.5" y="8" width="4.5" height="12" rx="1.6"/></svg>
+        <span>통계</span>
+      </button>
+    </nav>
+  </div>
+
+  <!-- 이벤트 추가 바텀시트 (+ 버튼의 지출/이벤트 전환에서 접근) -->
+  <dialog id="event-new-dialog" class="sheet">
+    <form id="event-new-form">
+      <div class="sheet-head">
+        <h2>이벤트 추가</h2>
+        <button type="button" id="en-cancel" class="text-btn">닫기</button>
+      </div>
+      <div class="seg" role="tablist">
+        <button type="button" data-mode="expense">지출/수입</button>
+        <button type="button" data-mode="event" class="active">이벤트</button>
+      </div>
+      <label>이벤트 이름
+        <input type="text" id="en-name" placeholder="예: 제주도 여행" maxlength="50" required>
+      </label>
+      <label>카테고리
+        <select id="en-category" required></select>
+      </label>
+      <label>시작일
+        <input type="date" id="en-start" required>
+      </label>
+      <label>종료일
+        <input type="date" id="en-end" required>
+      </label>
+      <p id="en-error" class="error"></p>
+      <div class="sheet-actions">
+        <button type="submit" class="primary">이벤트 만들기</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- 이벤트 상세/수정 바텀시트 -->
+  <dialog id="event-dialog" class="sheet">
+    <div class="sheet-head">
+      <h2>이벤트</h2>
+      <button type="button" id="ev-close" class="text-btn">닫기</button>
+    </div>
+    <form id="event-edit-form">
+      <input type="hidden" id="ev-id">
+      <label>이벤트 이름
+        <input type="text" id="ev-name" maxlength="50" required>
+      </label>
+      <label>카테고리
+        <select id="ev-category" required></select>
+      </label>
+      <div class="row-gap dates">
+        <label>시작일 <input type="date" id="ev-start" required></label>
+        <label>종료일 <input type="date" id="ev-end" required></label>
+      </div>
+      <p id="ev-error" class="error"></p>
+      <div class="sheet-actions">
+        <button type="button" id="ev-delete" class="danger">삭제</button>
+        <button type="submit" class="primary">이벤트 저장</button>
+      </div>
+    </form>
+    <div class="row-between ev-sum">
+      <h2>지출/수입 <span class="muted" id="ev-count"></span></h2>
+      <strong id="ev-total">0원</strong>
+    </div>
+    <div id="ev-expenses"></div>
+    <p id="ev-empty" class="muted center hidden">아직 지출/수입이 없습니다.</p>
+    <button type="button" id="ev-add" class="primary wide">+ 지출/수입 추가</button>
+  </dialog>
+
+  <!-- 지출/수입 추가/수정 바텀시트 -->
+  <dialog id="expense-dialog" class="sheet">
+    <form id="expense-form">
+      <div class="sheet-head">
+        <h2 id="form-title">지출/수입 추가</h2>
+        <button type="button" id="f-cancel" class="text-btn">닫기</button>
+      </div>
+      <div class="seg" id="mode-seg" role="tablist">
+        <button type="button" data-mode="expense" class="active">지출/수입</button>
+        <button type="button" data-mode="event">이벤트</button>
+      </div>
+      <input type="hidden" id="f-id">
+      <input type="hidden" id="f-event">
+      <label>항목
+        <input type="text" id="f-item" placeholder="예: 점심" maxlength="100" required>
+      </label>
+      <div class="seg kind" id="kind-seg" data-kind="expense" role="tablist">
+        <button type="button" data-kind="expense" class="active">지출</button>
+        <button type="button" data-kind="income">수입</button>
+      </div>
+      <label>금액
+        <input type="number" id="f-amount" inputmode="numeric" pattern="[0-9]*" placeholder="0" min="0" step="1" required>
+      </label>
+      <label>카테고리
+        <div class="row-gap">
+          <select id="f-category" required></select>
+          <button type="button" id="cat-manage-toggle" class="chip">관리</button>
+        </div>
+      </label>
+      <label>날짜
+        <input type="date" id="f-date" required>
+      </label>
+      <div id="rec-block">
+        <div class="switch-row">
+          <span>정기 지출/수입</span>
+          <button type="button" id="f-rec" class="switch" role="switch" aria-checked="false" aria-label="정기 지출/수입"></button>
+        </div>
+        <div id="rec-fields" class="hidden">
+          <div class="row-gap dates">
+            <label>몇 달에 한 번
+              <input type="number" id="f-rec-months" inputmode="numeric" min="1" max="120" step="1" value="1">
+            </label>
+            <label>며칠에 (매월 n일)
+              <input type="number" id="f-rec-day" inputmode="numeric" min="1" max="31" step="1">
+            </label>
+          </div>
+          <p class="muted small" id="rec-hint"></p>
+        </div>
+        <div id="rec-info" class="row-between hidden">
+          <span class="muted small" id="rec-info-text"></span>
+          <button type="button" id="rec-stop" class="chip danger">반복 중단</button>
+        </div>
+      </div>
+      <p id="form-error" class="error"></p>
+      <div class="sheet-actions">
+        <button type="button" id="f-delete" class="danger hidden">삭제</button>
+        <button type="submit" id="f-submit" class="primary">추가</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- 카테고리 관리 바텀시트 -->
+  <dialog id="cat-dialog" class="sheet">
+    <div class="sheet-head">
+      <h2 id="cat-title">카테고리 관리</h2>
+      <button type="button" id="cat-close" class="text-btn">닫기</button>
+    </div>
+    <form id="cat-add-form" class="row-gap">
+      <input type="text" id="cat-new" placeholder="새 카테고리 이름" maxlength="50" required>
+      <button type="submit" class="primary">추가</button>
+    </form>
+    <p id="cat-error" class="error"></p>
+    <div id="cat-list" class="rows"></div>
+  </dialog>
+
+  <!-- 선택 목록 시트 (카테고리, 기간 선택 등) -->
+  <dialog id="pick-dialog" class="sheet pick">
+    <h2 id="pick-title" class="pick-title">선택</h2>
+    <div id="pick-list"></div>
+  </dialog>
+
+  <!-- 확인/알림 창 (삭제 확인 등) -->
+  <dialog id="confirm-dialog" class="modal">
+    <h2 id="cf-title" class="cf-title"></h2>
+    <p id="cf-msg" class="cf-msg"></p>
+    <div class="cf-actions">
+      <button type="button" id="cf-cancel" class="btn-cancel">취소</button>
+      <button type="button" id="cf-ok" class="btn-primary">확인</button>
+    </div>
+  </dialog>
+
+  <script src="ui.js"></script>
+  <script src="app.js"></script>
+  <script src="stats.js"></script>
+</body>
+</html>
