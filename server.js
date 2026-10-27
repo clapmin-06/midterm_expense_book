@@ -26,10 +26,14 @@ if (GOOGLE_ENABLED && !SECRET_OK) {
 const pool = new Pool({
   connectionString: DATABASE_URL,
   ssl: { rejectUnauthorized: false },
-  max: 3,
+  max: 5,
+  keepAlive: true, // 요청 사이에 연결을 유지해 TLS 연결을 매번 새로 맺지 않도록
+  idleTimeoutMillis: 60000,
 });
 
 // ---- DB 구조: 모든 데이터는 user_id 로 사용자별 분리 ----
+// 구조를 바꾸면 SCHEMA_VERSION 을 올린다. 이미 같은 버전이면 인스턴스가 시작할 때 DDL 을 건너뜀(쿼리 1번으로 확인)
+const SCHEMA_VERSION = '4';
 const SCHEMA = `
   CREATE TABLE IF NOT EXISTS users (
     id SERIAL PRIMARY KEY,
@@ -85,6 +89,9 @@ const SCHEMA = `
   CREATE INDEX IF NOT EXISTS events_user_idx ON events (user_id);
   CREATE INDEX IF NOT EXISTS recurring_user_next_idx ON recurring (user_id, next_date);
   ALTER TABLE events ADD COLUMN IF NOT EXISTS emoji TEXT;
+  CREATE TABLE IF NOT EXISTS app_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+  INSERT INTO app_meta (key, value) VALUES ('schema_version', '${SCHEMA_VERSION}')
+    ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value;
 `;
 
 const DEFAULT_CATEGORIES = {
@@ -92,10 +99,18 @@ const DEFAULT_CATEGORIES = {
   income: ['월급', '용돈', '부수입', '이자/투자', '기타'],
 };
 
+async function schemaCurrent() {
+  try {
+    const r = await pool.query("SELECT value FROM app_meta WHERE key = 'schema_version'");
+    return r.rows[0]?.value === SCHEMA_VERSION;
+  } catch { return false; } // app_meta 가 아직 없으면(처음/예전 구조) 전체 초기화 진행
+}
+
 let initPromise;
 function initDb() {
   if (!initPromise) {
     initPromise = (async () => {
+      if (await schemaCurrent()) return;
       const client = await pool.connect();
       try {
         await client.query('BEGIN');
@@ -201,10 +216,14 @@ async function requireAuth(req, res, next) {
     const s = readSession(req);
     if (!s) return res.status(401).json({ error: '인증이 필요합니다.' });
     await initDb();
-    const u = await pool.query('SELECT 1 FROM users WHERE id = $1', [s.uid]);
+    // 사용자 존재 여부와 "오늘까지 생성해야 할 정기 항목이 있는지"를 한 번의 왕복으로 확인
+    const u = await pool.query(
+      `SELECT EXISTS (SELECT 1 FROM recurring WHERE user_id = u.id AND next_date <= $2) AS due FROM users u WHERE u.id = $1`,
+      [s.uid, todayKST()]);
     if (!u.rowCount) { clearSession(res); return res.status(401).json({ error: '인증이 필요합니다.' }); }
     req.userId = s.uid;
     renewSession(res, s);
+    if (u.rows[0].due) await materialize(s.uid);
     next();
   } catch (e) { next(e); }
 }
@@ -331,9 +350,6 @@ app.get('/api/me', async (req, res, next) => {
 
 const api = express.Router();
 api.use(requireAuth);
-api.use(async (req, res, next) => {
-  try { await initDb(); await materialize(req.userId); next(); } catch (e) { next(e); }
-});
 
 // ---- 정기 지출/수입: 도래한 반복 항목을 실제 내역으로 만들어 둠 ----
 const pad = (n) => String(n).padStart(2, '0');
@@ -347,10 +363,8 @@ function nextOccurrence(ymd, months, day) {
   const last = new Date(Date.UTC(y, m, 0)).getUTCDate();
   return `${y}-${pad(m)}-${pad(Math.min(day, last))}`;
 }
-async function materialize(uid) {
+async function materialize(uid) { // 도래한 정기 항목이 있을 때만 호출됨 (requireAuth 에서 확인)
   const today = todayKST();
-  const due = await pool.query('SELECT 1 FROM recurring WHERE user_id = $1 AND next_date <= $2 LIMIT 1', [uid, today]);
-  if (!due.rowCount) return;
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -387,6 +401,7 @@ function validate(body) {
   return null;
 }
 
+const bad = (msg) => Object.assign(new Error(msg), { status: 400 }); // 잘못된 요청 -> 400 으로 응답
 const MONTH_RE = /^\d{4}-\d{2}$/;
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -405,32 +420,33 @@ const likePattern = (q) => '%' + String(q).trim().slice(0, 100).replace(/[\\%_]/
 
 // 목록 조회 (?date=YYYY-MM-DD | ?from=&to= | ?month=YYYY-MM | ?q=항목명)
 // 기본은 이벤트에 속하지 않은 지출만, ?event=ID 는 해당 이벤트의 지출, ?q= 검색 시에는 이벤트 안 내역도 포함
+async function expensesQuery(uid, query) {
+  const { date, from, to, month, event } = query;
+  const q = typeof query.q === 'string' ? query.q.trim() : '';
+  for (const d of [date, from, to]) {
+    if (d !== undefined && !DATE_RE.test(d)) throw bad('날짜 형식이 올바르지 않습니다.');
+  }
+  if (month !== undefined && !MONTH_RE.test(month)) throw bad('월 형식이 올바르지 않습니다.');
+  if (event !== undefined && !/^\d+$/.test(event)) throw bad('잘못된 ID입니다.');
+  const params = [uid];
+  const where = ['x.user_id = $1'];
+  if (event) { params.push(Number(event)); where.push(`event_id = $${params.length}`); }
+  else if (!q) where.push('event_id IS NULL');
+  if (date) { params.push(date); where.push(`date = $${params.length}`); }
+  if (from) { params.push(from); where.push(`date >= $${params.length}`); }
+  if (to) { params.push(to); where.push(`date <= $${params.length}`); }
+  if (month) { params.push(month + '-01'); where.push(`date_trunc('month', date) = $${params.length}::date`); }
+  if (q) { params.push(likePattern(q)); where.push(`x.item ILIKE $${params.length} ESCAPE '\\'`); }
+  const sql = `SELECT x.id, to_char(x.date,'YYYY-MM-DD') AS date, x.item, x.category, x.amount, x.kind, x.event_id, ev.name AS event_name, ev.emoji AS event_emoji,
+                      x.recurring_id, rc.interval_months, rc.day_of_month
+               FROM expenses x LEFT JOIN recurring rc ON rc.id = x.recurring_id
+               LEFT JOIN events ev ON ev.id = x.event_id
+               WHERE ${where.join(' AND ')}
+               ORDER BY x.date DESC, x.id DESC LIMIT 1000`;
+  return (await pool.query(sql, params)).rows;
+}
 api.get('/expenses', async (req, res, next) => {
-  try {
-    const { date, from, to, month, event } = req.query;
-    const q = typeof req.query.q === 'string' ? req.query.q.trim() : '';
-    for (const d of [date, from, to]) {
-      if (d !== undefined && !DATE_RE.test(d)) return res.status(400).json({ error: '날짜 형식이 올바르지 않습니다.' });
-    }
-    if (month !== undefined && !MONTH_RE.test(month)) return res.status(400).json({ error: '월 형식이 올바르지 않습니다.' });
-    if (event !== undefined && !/^\d+$/.test(event)) return res.status(400).json({ error: '잘못된 ID입니다.' });
-    const params = [req.userId];
-    const where = ['x.user_id = $1'];
-    if (event) { params.push(Number(event)); where.push(`event_id = $${params.length}`); }
-    else if (!q) where.push('event_id IS NULL');
-    if (date) { params.push(date); where.push(`date = $${params.length}`); }
-    if (from) { params.push(from); where.push(`date >= $${params.length}`); }
-    if (to) { params.push(to); where.push(`date <= $${params.length}`); }
-    if (month) { params.push(month + '-01'); where.push(`date_trunc('month', date) = $${params.length}::date`); }
-    if (q) { params.push(likePattern(q)); where.push(`x.item ILIKE $${params.length} ESCAPE '\\'`); }
-    const sql = `SELECT x.id, to_char(x.date,'YYYY-MM-DD') AS date, x.item, x.category, x.amount, x.kind, x.event_id, ev.name AS event_name, ev.emoji AS event_emoji,
-                        x.recurring_id, rc.interval_months, rc.day_of_month
-                 FROM expenses x LEFT JOIN recurring rc ON rc.id = x.recurring_id
-                 LEFT JOIN events ev ON ev.id = x.event_id
-                 WHERE ${where.join(' AND ')}
-                 ORDER BY x.date DESC, x.id DESC LIMIT 1000`;
-    res.json((await pool.query(sql, params)).rows);
-  } catch (e) { next(e); }
+  try { res.json(await expensesQuery(req.userId, req.query)); } catch (e) { next(e); }
 });
 
 api.post('/expenses', async (req, res, next) => {
@@ -553,18 +569,27 @@ const EVENT_SELECT = `
   FROM events e LEFT JOIN expenses x ON x.event_id = e.id AND x.user_id = e.user_id`;
 const toEvent = (r) => ({ ...r, total: Number(r.total), day_total: Number(r.day_total) });
 
+async function eventsQuery(uid, query) {
+  const { date } = query;
+  const q = typeof query.q === 'string' ? query.q.trim() : '';
+  if (date !== undefined && !DATE_RE.test(date)) throw bad('날짜 형식이 올바르지 않습니다.');
+  const where = ['e.user_id = $2', date ? 'e.start_date <= $1::date AND e.end_date >= $1::date' : '$1::date IS NULL'];
+  const params = [date || null, uid];
+  if (q) { params.push(likePattern(q)); where.push(`e.name ILIKE $3 ESCAPE '\\'`); }
+  const r = await pool.query(
+    `${EVENT_SELECT} WHERE ${where.join(' AND ')}
+     GROUP BY e.id ORDER BY e.start_date DESC, e.id DESC`, params);
+  return r.rows.map(toEvent);
+}
 api.get('/events', async (req, res, next) => {
+  try { res.json(await eventsQuery(req.userId, req.query)); } catch (e) { next(e); }
+});
+
+// 내역 화면에 필요한 것(일반 내역 + 이벤트)을 한 번의 요청으로 (두 쿼리는 서버에서 동시에 실행)
+api.get('/home', async (req, res, next) => {
   try {
-    const { date } = req.query;
-    const q = typeof req.query.q === 'string' ? req.query.q.trim() : '';
-    if (date !== undefined && !DATE_RE.test(date)) return res.status(400).json({ error: '날짜 형식이 올바르지 않습니다.' });
-    const where = ['e.user_id = $2', date ? 'e.start_date <= $1::date AND e.end_date >= $1::date' : '$1::date IS NULL'];
-    const params = [date || null, req.userId];
-    if (q) { params.push(likePattern(q)); where.push(`e.name ILIKE $3 ESCAPE '\\'`); }
-    const r = await pool.query(
-      `${EVENT_SELECT} WHERE ${where.join(' AND ')}
-       GROUP BY e.id ORDER BY e.start_date DESC, e.id DESC`, params);
-    res.json(r.rows.map(toEvent));
+    const [expenses, events] = await Promise.all([expensesQuery(req.userId, req.query), eventsQuery(req.userId, req.query)]);
+    res.json({ expenses, events });
   } catch (e) { next(e); }
 });
 
@@ -629,20 +654,27 @@ api.delete('/events/:id', async (req, res, next) => {
 const kindOf = (v) => (v === 'income' ? 'income' : 'expense');
 
 // 카테고리 목록 (기본 + 사용자 추가 + 기존 내역에 쓰인 것)
+async function categoriesQuery(uid, kind) {
+  const r = await pool.query(
+    `SELECT name FROM (
+       SELECT name, created_at FROM categories WHERE user_id = $2 AND kind = $1
+       UNION
+       SELECT category, now() FROM expenses WHERE user_id = $2 AND kind = $1
+         AND category NOT IN (SELECT name FROM categories WHERE user_id = $2 AND kind = $1)
+       UNION
+       SELECT category, now() FROM events WHERE user_id = $2 AND $1 = 'expense'
+         AND category NOT IN (SELECT name FROM categories WHERE user_id = $2 AND kind = 'expense')
+     ) c ORDER BY created_at, name`, [kind, uid]);
+  return r.rows.map((x) => x.name);
+}
 api.get('/categories', async (req, res, next) => {
+  try { res.json(await categoriesQuery(req.userId, kindOf(req.query.kind))); } catch (e) { next(e); }
+});
+// 지출/수입 카테고리를 한 번에
+api.get('/categories/all', async (req, res, next) => {
   try {
-    const kind = kindOf(req.query.kind);
-    const r = await pool.query(
-      `SELECT name FROM (
-         SELECT name, created_at FROM categories WHERE user_id = $2 AND kind = $1
-         UNION
-         SELECT category, now() FROM expenses WHERE user_id = $2 AND kind = $1
-           AND category NOT IN (SELECT name FROM categories WHERE user_id = $2 AND kind = $1)
-         UNION
-         SELECT category, now() FROM events WHERE user_id = $2 AND $1 = 'expense'
-           AND category NOT IN (SELECT name FROM categories WHERE user_id = $2 AND kind = 'expense')
-       ) c ORDER BY created_at, name`, [kind, req.userId]);
-    res.json(r.rows.map((x) => x.name));
+    const [expense, income] = await Promise.all([categoriesQuery(req.userId, 'expense'), categoriesQuery(req.userId, 'income')]);
+    res.json({ expense, income });
   } catch (e) { next(e); }
 });
 
@@ -706,32 +738,57 @@ api.delete('/categories/:name', async (req, res, next) => {
 });
 
 // 월별 합계
+async function monthlyQuery(uid) {
+  const r = await pool.query(
+    `SELECT to_char(date,'YYYY-MM') AS month,
+            COALESCE(SUM(amount) FILTER (WHERE kind = 'expense'),0)::bigint AS total,
+            COALESCE(SUM(amount) FILTER (WHERE kind = 'income'),0)::bigint AS income,
+            COUNT(*)::int AS count
+     FROM expenses WHERE user_id = $1 GROUP BY 1 ORDER BY 1 DESC`, [uid]);
+  return r.rows.map((x) => ({ ...x, total: Number(x.total), income: Number(x.income) }));
+}
 api.get('/summary/monthly', async (req, res, next) => {
-  try {
-    const r = await pool.query(
-      `SELECT to_char(date,'YYYY-MM') AS month,
-              COALESCE(SUM(amount) FILTER (WHERE kind = 'expense'),0)::bigint AS total,
-              COALESCE(SUM(amount) FILTER (WHERE kind = 'income'),0)::bigint AS income,
-              COUNT(*)::int AS count
-       FROM expenses WHERE user_id = $1 GROUP BY 1 ORDER BY 1 DESC`, [req.userId]);
-    res.json(r.rows.map((x) => ({ ...x, total: Number(x.total), income: Number(x.income) })));
-  } catch (e) { next(e); }
+  try { res.json(await monthlyQuery(req.userId)); } catch (e) { next(e); }
 });
 
-// 카테고리별 지출 합계 (?month=YYYY-MM | ?year=YYYY 선택, 수입 제외)
+// 카테고리별 지출 합계 (month=YYYY-MM | year=YYYY 선택, 수입 제외)
+async function categorySumQuery(uid, { month, year } = {}) {
+  if (month !== undefined && !MONTH_RE.test(month)) throw bad('월 형식이 올바르지 않습니다.');
+  if (year !== undefined && !/^\d{4}$/.test(year)) throw bad('연도 형식이 올바르지 않습니다.');
+  const params = [uid];
+  let where = `WHERE user_id = $1 AND kind = 'expense'`;
+  if (month) { params.push(month + '-01'); where += ` AND date_trunc('month', date) = $${params.length}::date`; }
+  if (year) { params.push(year + '-01-01'); where += ` AND date_trunc('year', date) = $${params.length}::date`; }
+  const r = await pool.query(
+    `SELECT category, SUM(amount)::bigint AS total, COUNT(*)::int AS count
+     FROM expenses ${where} GROUP BY category ORDER BY total DESC`, params);
+  return r.rows.map((x) => ({ ...x, total: Number(x.total) }));
+}
 api.get('/summary/category', async (req, res, next) => {
+  try { res.json(await categorySumQuery(req.userId, req.query)); } catch (e) { next(e); }
+});
+
+// 통계 화면에 필요한 것을 한 번의 요청으로: 월별 합계 + 지출 카테고리 순서 + (전체/선택한 달/선택한 해)의 카테고리별 합계
+// month/year 를 주지 않으면 이번 달/올해(내역이 있을 때), 없으면 가장 최근 달/해를 고름
+api.get('/stats', async (req, res, next) => {
   try {
     const { month, year } = req.query;
-    if (month !== undefined && !MONTH_RE.test(month)) return res.status(400).json({ error: '월 형식이 올바르지 않습니다.' });
-    if (year !== undefined && !/^\d{4}$/.test(year)) return res.status(400).json({ error: '연도 형식이 올바르지 않습니다.' });
-    const params = [req.userId];
-    let where = `WHERE user_id = $1 AND kind = 'expense'`;
-    if (month) { params.push(month + '-01'); where += ` AND date_trunc('month', date) = $${params.length}::date`; }
-    if (year) { params.push(year + '-01-01'); where += ` AND date_trunc('year', date) = $${params.length}::date`; }
-    const r = await pool.query(
-      `SELECT category, SUM(amount)::bigint AS total, COUNT(*)::int AS count
-       FROM expenses ${where} GROUP BY category ORDER BY total DESC`, params);
-    res.json(r.rows.map((x) => ({ ...x, total: Number(x.total) })));
+    if (month !== undefined && !MONTH_RE.test(month)) throw bad('월 형식이 올바르지 않습니다.');
+    if (year !== undefined && !/^\d{4}$/.test(year)) throw bad('연도 형식이 올바르지 않습니다.');
+    const uid = req.userId;
+    const monthly = await monthlyQuery(uid);
+    const months = monthly.map((m) => m.month);
+    const years = [...new Set(months.map((m) => m.slice(0, 4)))];
+    const nowMonth = todayKST().slice(0, 7);
+    const m = months.includes(month) ? month : months.includes(nowMonth) ? nowMonth : months[0] || null;
+    const y = years.includes(year) ? year : years.includes(nowMonth.slice(0, 4)) ? nowMonth.slice(0, 4) : years[0] || null;
+    const [order, all, byMonth, byYear] = await Promise.all([
+      categoriesQuery(uid, 'expense'),
+      categorySumQuery(uid, {}),
+      m ? categorySumQuery(uid, { month: m }) : [],
+      y ? categorySumQuery(uid, { year: y }) : [],
+    ]);
+    res.json({ monthly, order, month: m, year: y, cat: { all, month: byMonth, year: byYear } });
   } catch (e) { next(e); }
 });
 
@@ -739,6 +796,7 @@ app.use('/api', api);
 
 // 오류 처리: DB 접속 정보 등 내부 정보를 응답에 노출하지 않음
 app.use((err, req, res, next) => {
+  if (err.status === 400) return res.status(400).json({ error: err.message });
   console.error(err.message);
   res.status(500).json({ error: '서버 오류가 발생했습니다.' });
 });

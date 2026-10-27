@@ -355,3 +355,30 @@ button:focus-visible { outline: 3px solid rgba(49, 130, 246, .35); outline-offse
 .emoji-cell:active { background: var(--field); transform: none; }
 .emoji-cell.on { background: var(--primary-weak); box-shadow: inset 0 0 0 2px var(--primary); }
 dialog.pick > button.wide { margin-top: 6px; }
+
+/* ----- 홈 화면에 추가 배너 / 안내 ----- */
+.install-banner {
+  display: flex; align-items: center; gap: 12px; margin: 0 16px 12px; padding: 14px 8px 14px 16px; background: var(--primary-weak);
+  border-radius: 20px;
+}
+.install-banner .ib-mark { width: 34px; height: 34px; flex: none; }
+.ib-text { flex: 1; min-width: 0; display: flex; flex-direction: column; line-height: 1.35; }
+.ib-text strong { font-size: .98rem; }
+.ib-text span { color: var(--text2); font-size: .85rem; }
+.ib-btn { min-height: 0; height: 38px; padding: 0 14px; border-radius: 19px; background: var(--primary); color: #fff; font-weight: 700; font-size: .9rem; flex: none; }
+.ib-x { min-height: 0; width: 32px; height: 38px; padding: 0; background: none; color: var(--muted); flex: none; }
+.ins-h { font-size: 1.05rem; font-weight: 800; margin: 14px 0 6px; }
+.steps { margin: 0 0 12px; padding-left: 22px; color: var(--text2); line-height: 1.9; font-size: 1rem; }
+.steps b { color: var(--text); }
+.ins-ico { vertical-align: -5px; margin: 0 2px; color: var(--primary); }
+#install-dialog .wide { margin-top: 14px; }
+/* 카카오톡 등 앱 안 브라우저: 구글 로그인이 막히므로 버튼 대신 안내 */
+.inapp-note { display: none; margin-top: 4px; padding: 20px; background: #fff; border-radius: 20px; }
+.inapp-note strong { display: block; font-size: 1.15rem; margin-bottom: 6px; }
+.inapp-note p { margin: 0 0 16px; color: var(--text2); line-height: 1.6; }
+html.inapp .inapp-note { display: block; }
+html.inapp #google-login { display: none !important; }
+
+/* ----- 빠른 반응: 삭제한 줄은 바로 숨김, 처리 중인 버튼 표시 ----- */
+.item.removing { display: none; }
+button:disabled { opacity: .6; cursor: default; }

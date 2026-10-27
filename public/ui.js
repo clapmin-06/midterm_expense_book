@@ -132,3 +132,8 @@ byId('emoji-dialog').addEventListener('click', (e) => { if (e.target === e.curre
 enhanceSelect(byId('f-category'), '카테고리');
 enhanceSelect(byId('en-category'), '카테고리');
 enhanceSelect(byId('ev-category'), '카테고리');
+
+// 서비스 워커: 화면 파일(HTML/CSS/JS)을 기기에 저장해 두 번째 실행부터 즉시 열리게 함 (API 는 저장하지 않음)
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => { navigator.serviceWorker.register('/sw.js').catch(() => {}); });
+}

@@ -4,15 +4,26 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#f2f4f6">
+  <meta name="application-name" content="돈비">
+  <meta name="apple-mobile-web-app-title" content="돈비">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <title>돈비 - 가계부</title>
   <link rel="icon" type="image/svg+xml" href="/icons/donb-icon.svg">
   <link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32.png">
   <link rel="apple-touch-icon" href="/icons/apple-touch-icon-180.png">
   <link rel="manifest" href="/manifest.webmanifest">
   <!-- 글꼴: Pretendard (불러오지 못하면 시스템 글꼴로 대체됨) -->
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
-  <!-- 로고 워드마크(DonB)용 글꼴 -->
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Outfit:wght@800&display=swap">
+  <!-- 글꼴은 화면 표시를 막지 않고 불러옴(받는 동안은 시스템 글꼴로 먼저 표시). 로고 워드마크용 Outfit 은 "DonB" 네 글자만 받음 -->
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="preload" as="style" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css" onload="this.onload=null;this.rel='stylesheet'">
+  <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Outfit:wght@800&text=DonB&display=swap" onload="this.onload=null;this.rel='stylesheet'">
+  <noscript>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Outfit:wght@800&text=DonB&display=swap">
+  </noscript>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -34,6 +45,11 @@
       <input type="password" id="password" placeholder="개발용 비밀번호" autocomplete="current-password" required>
       <button type="submit" class="primary">로그인</button>
     </form>
+    <div id="inapp-note" class="inapp-note">
+      <strong>다른 브라우저로 열어 주세요</strong>
+      <p>카카오톡, 인스타그램 같은 앱 안의 화면에서는 구글이 로그인을 막아요. 크롬이나 사파리에서 열면 바로 로그인할 수 있어요.</p>
+      <button type="button" id="inapp-open" class="primary">기본 브라우저로 열기</button>
+    </div>
     <p id="login-note" class="muted small hidden">로그인 방법이 설정되지 않았어요. 서버 환경변수를 확인해 주세요.</p>
     <p id="login-error" class="error"></p>
     <p class="login-foot">계속하면 <a href="/privacy.html">개인정보처리방침</a>을 확인한 것으로 봅니다.</p>
@@ -47,6 +63,14 @@
         <button id="logout" class="text-btn">로그아웃</button>
       </div>
     </header>
+
+    <!-- 홈 화면에 추가 안내 (휴대폰에서, 앱으로 설치하지 않은 경우에만 표시) -->
+    <div id="install-banner" class="install-banner hidden">
+      <span class="brand-mark ib-mark"></span>
+      <div class="ib-text"><strong>홈 화면에 추가해 보세요</strong><span>앱처럼 바로 열어 쓸 수 있어요</span></div>
+      <button type="button" id="ib-action" class="ib-btn">추가 방법</button>
+      <button type="button" id="ib-close" class="ib-x" aria-label="닫기">✕</button>
+    </div>
 
     <!-- 내역 탭 -->
     <main id="tab-list" class="tab">
@@ -262,6 +286,32 @@
     <div id="cat-list" class="rows"></div>
   </dialog>
 
+  <!-- 홈 화면에 추가 방법 안내 -->
+  <dialog id="install-dialog" class="sheet">
+    <div class="sheet-head">
+      <h2>홈 화면에 추가하기</h2>
+      <button type="button" id="ins-close" class="text-btn">닫기</button>
+    </div>
+    <div id="ins-ios">
+      <h3 class="ins-h">아이폰 (Safari)</h3>
+      <ol class="steps">
+        <li>화면 아래의 <b>공유 버튼</b> <svg class="ins-ico" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 15V3M8 7l4-4 4 4"/><path d="M6 11H5a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-6a2 2 0 0 0-2-2h-1"/></svg>을 누르세요.</li>
+        <li>메뉴를 올려 <b>홈 화면에 추가</b>를 누르세요.</li>
+        <li>오른쪽 위 <b>추가</b>를 누르면 끝이에요.</li>
+      </ol>
+      <p class="muted small">Safari가 아닌 다른 앱(카카오톡 등)에서 열었다면 Safari로 열어야 해요.</p>
+    </div>
+    <div id="ins-android">
+      <h3 class="ins-h">안드로이드 (Chrome)</h3>
+      <ol class="steps">
+        <li>오른쪽 위 <b>점 세 개(⋮)</b>를 누르세요.</li>
+        <li><b>앱 설치</b> 또는 <b>홈 화면에 추가</b>를 누르세요.</li>
+        <li>안내에 따라 <b>설치</b>를 누르면 끝이에요.</li>
+      </ol>
+    </div>
+    <button type="button" id="ins-ok" class="primary wide">확인했어요</button>
+  </dialog>
+
   <!-- 이모티콘 선택 시트 (이벤트) -->
   <dialog id="emoji-dialog" class="sheet pick">
     <h2 class="pick-title">이모티콘 선택</h2>
@@ -288,5 +338,6 @@
   <script src="ui.js"></script>
   <script src="app.js"></script>
   <script src="stats.js"></script>
+  <script src="install.js"></script>
 </body>
 </html>

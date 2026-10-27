@@ -8,7 +8,11 @@ function svgEl(tag, attrs, parent) {
   return e;
 }
 
-const stats = { monthly: [], order: [], month: '', year: '' };
+// cats: 기간별 카테고리 합계 캐시 ('all' | 'm:YYYY-MM' | 'y:YYYY'). 데이터가 바뀌어 통계를 다시 불러올 때 비움
+const stats = { monthly: [], order: [], month: '', year: '', cats: {} };
+async function periodRows(key, query) {
+  return stats.cats[key] ?? (stats.cats[key] = await api('/summary/category' + query));
+}
 
 const compact = (n) => {
   const f = (v, u) => `${+v.toFixed(1)}${u}`;
@@ -225,7 +229,7 @@ async function renderMonthCard() {
   const months = stats.monthly.map((m) => m.month); // 최신순
   if (!months.length) return emptyCard(host, '월별 통계');
   const by = Object.fromEntries(stats.monthly.map((m) => [m.month, m]));
-  const catRows = await api('/summary/category?month=' + stats.month);
+  const catRows = await periodRows('m:' + stats.month, '?month=' + stats.month);
 
   // 최근 6개월 (고른 달이 그보다 오래됐으면 그 달이 보이도록 창을 옮김)
   const latest = months[0];
@@ -263,7 +267,7 @@ async function renderYearCard() {
     byYear[y].income += m.income;
   }
   const years = Object.keys(byYear).sort().reverse(); // 최신순
-  const catRows = await api('/summary/category?year=' + stats.year);
+  const catRows = await periodRows('y:' + stats.year, '?year=' + stats.year);
   const first = Math.max(+years[years.length - 1], +years[0] - 4); // 최근 5년까지
   const items = [];
   for (let y = first; y <= +years[0]; y++) {
@@ -284,7 +288,7 @@ async function renderYearCard() {
 async function renderAllCard() {
   const host = $('st-all');
   if (!stats.monthly.length) return emptyCard(host, '전체 통계');
-  const catRows = await api('/summary/category');
+  const catRows = await periodRows('all', '');
   const months = stats.monthly.map((m) => m.month);
   const { expense, income } = sumOf(stats.monthly);
   renderCard(host, {
@@ -294,15 +298,19 @@ async function renderAllCard() {
   });
 }
 
+// 통계는 한 번의 요청으로 받음: 월별 합계 + 카테고리 순서 + (전체/선택한 달/선택한 해)의 카테고리별 합계
 async function loadSummaries() {
-  const [monthly, order] = await Promise.all([api('/summary/monthly'), api('/categories?kind=expense')]);
-  stats.monthly = monthly;
-  stats.order = order;
-  const months = monthly.map((m) => m.month);
-  // 기본 선택은 이번 달/올해(내역이 있을 때), 없으면 가장 최근
-  const nowMonth = today().slice(0, 7);
-  if (!months.includes(stats.month)) stats.month = months.includes(nowMonth) ? nowMonth : months[0] || '';
-  const years = [...new Set(months.map((m) => m.slice(0, 4)))];
-  if (!years.includes(stats.year)) stats.year = years.includes(nowMonth.slice(0, 4)) ? nowMonth.slice(0, 4) : years[0] || '';
+  const qs = new URLSearchParams();
+  if (stats.month) qs.set('month', stats.month);
+  if (stats.year) qs.set('year', stats.year);
+  const d = await api('/stats' + (qs.toString() ? '?' + qs : ''));
+  statsDirty = false;
+  stats.monthly = d.monthly;
+  stats.order = d.order;
+  stats.month = d.month || ''; // 서버가 기본값(이번 달/올해, 없으면 가장 최근)을 골라 줌
+  stats.year = d.year || '';
+  stats.cats = { all: d.cat.all };
+  if (d.month) stats.cats['m:' + d.month] = d.cat.month;
+  if (d.year) stats.cats['y:' + d.year] = d.cat.year;
   await Promise.all([renderMonthCard(), renderYearCard(), renderAllCard()]);
 }

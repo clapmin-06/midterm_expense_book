@@ -23,6 +23,9 @@ function el(tag, cls, text) {
   if (text !== undefined) e.textContent = text;
   return e;
 }
+// 데이터가 바뀌면 true. 통계는 화면에 보일 때(탭을 열 때)만 다시 불러와 불필요한 요청을 줄임
+let statsDirty = true;
+const statsVisible = () => !$('tab-stats').classList.contains('hidden');
 const today = () => new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10);
 
 // 서버가 알려준 로그인 방식(/api/me): 구글 로그인 / 개발용 비밀번호 로그인
@@ -61,6 +64,7 @@ function showApp() {
       me.append([...(u.name || '?')][0]);
     }
   }
+  loadCategories().catch(() => {}); // 카테고리와 내역 목록을 동시에 불러옴
   refresh();
 }
 
@@ -71,6 +75,7 @@ document.querySelectorAll('.tabbar button').forEach((b) => {
     $('tab-list').classList.toggle('hidden', b.dataset.tab !== 'list');
     $('tab-stats').classList.toggle('hidden', b.dataset.tab !== 'stats');
     window.scrollTo(0, 0);
+    if (b.dataset.tab === 'stats' && statsDirty) loadSummaries().catch((e) => uiAlert(e.message));
   };
 });
 
@@ -84,7 +89,7 @@ async function loadList() {
   if (q) qs.set('q', q);
   const qstr = qs.toString() ? '?' + qs : '';
   const seq = ++listSeq;
-  const [rows, events] = await Promise.all([api('/expenses' + qstr), api('/events' + qstr)]);
+  const { expenses: rows, events } = await api('/home' + qstr); // 일반 내역 + 이벤트를 한 번에
   if (seq !== listSeq) return; // 더 최근에 요청한 검색이 있으면 이 결과는 버림
   $('s-cal').classList.toggle('active', !!date);
   $('s-date-tag').classList.toggle('hidden', !date);
@@ -110,7 +115,7 @@ async function loadList() {
     const left = el('div', 'left');
     left.append(el('div', 'name', ev.name), el('div', 'cat', `${ev.category} · ${ev.start_date} ~ ${ev.end_date} · ${ev.count}건`));
     evBox.append(itemRow('event', left, el('div', 'amt' + (ev.total > 0 ? ' pos' : ''), signed(ev.total)),
-      () => openEvent(ev.id), () => deleteEvent(ev), ev.name, eventAvatarEl(ev)));
+      () => openEvent(ev.id), (row) => deleteEvent(ev, row), ev.name, eventAvatarEl(ev)));
   }
 
   let group = null;
@@ -138,7 +143,7 @@ async function loadList() {
     if (r.event_id) sub.append(el('span', 'ev-tag', `${eventEmoji({ emoji: r.event_emoji, name: r.event_name })} ${r.event_name}`));
     sub.append(r.category + (r.recurring_id ? ' · 정기' : ''));
     left.append(el('div', 'name', r.item), sub);
-    wrap.append(itemRow('', left, amountEl(r), () => (r.event_id ? openEventExpense(r) : openForm(r)), () => deleteExpense(r), r.item, logoAvatarEl()));
+    wrap.append(itemRow('', left, amountEl(r), () => (r.event_id ? openEventExpense(r) : openForm(r)), (row) => deleteExpense(r, row), r.item, logoAvatarEl()));
   }
 }
 
@@ -153,7 +158,7 @@ function itemRow(extraCls, left, amt, onOpen, onDelete, name, avatar) {
   const del = el('button', 'item-del', '삭제');
   del.type = 'button';
   del.setAttribute('aria-label', `${name} 삭제`);
-  del.onclick = onDelete;
+  del.onclick = () => onDelete(row);
   row.append(main, del);
   return row;
 }
@@ -174,22 +179,26 @@ async function confirmDelete(r) {
 }
 const deleteUrl = (r) => '/expenses/' + r.id + (r.recurring_id ? '?stop_recurring=1' : '');
 
-async function deleteExpense(r) {
+async function deleteExpense(r, row) {
   if (!(await confirmDelete(r))) return;
+  if (row) row.classList.add('removing'); // 바로 사라지게 보이고, 실패하면 되돌림
   try {
     await api(deleteUrl(r), { method: 'DELETE' });
-    if (currentEvent) await loadEvent(currentEvent.id).catch(() => {}); // 이벤트 상세가 열려 있으면 함께 갱신
+    if (currentEvent) loadEvent(currentEvent.id).catch(() => {}); // 이벤트 상세가 열려 있으면 함께 갱신
     refresh();
   } catch (err) {
+    if (row) row.classList.remove('removing');
     uiAlert(err.message);
   }
 }
-async function deleteEvent(ev) {
+async function deleteEvent(ev, row) {
   if (!(await uiConfirm({ title: `'${ev.name}' 이벤트를 삭제할까요?`, message: ev.count ? `이벤트에 속한 지출/수입 ${ev.count}건도 함께 삭제돼요.` : '삭제한 이벤트는 되돌릴 수 없어요.', okText: '삭제', danger: true }))) return;
+  if (row) row.classList.add('removing');
   try {
     await api('/events/' + ev.id, { method: 'DELETE' });
     refresh();
   } catch (err) {
+    if (row) row.classList.remove('removing');
     uiAlert(err.message);
   }
 }
@@ -254,7 +263,9 @@ function fillFormCategories(keep) {
 }
 
 async function loadCategories(selected) {
-  [catCache.expense, catCache.income] = await Promise.all([api('/categories?kind=expense'), api('/categories?kind=income')]);
+  const all = await api('/categories/all'); // 지출/수입을 한 번에
+  catCache.expense = all.expense;
+  catCache.income = all.income;
   const names = catCache[catKind];
   const formKind = $('kind-seg').dataset.kind;
   fillFormCategories(formKind === catKind ? selected : undefined);
@@ -302,8 +313,7 @@ async function loadCategories(selected) {
           for (const id of selIds) $(id).value = next;
           refreshEmojiField('en');
           refreshEmojiField('ev');
-          loadList();
-          loadSummaries();
+          refresh();
         } catch (err) {
           $('cat-error').textContent = err.message;
         }
@@ -335,12 +345,21 @@ async function loadCategories(selected) {
 }
 
 async function refresh() {
+  statsDirty = true;
   try {
-    await loadCategories(); // 목록 아이콘 색이 카테고리 순서에 맞도록 먼저 불러옴
-    await Promise.all([loadList(), loadSummaries()]);
+    await Promise.all([loadList(), statsVisible() ? loadSummaries() : null]);
   } catch (e) {
     uiAlert(e.message);
   }
+}
+
+// 버튼을 누른 동안 "저장 중…"으로 바꾸고 중복 제출을 막음 (누른 즉시 반응이 보이도록)
+async function withBusy(btn, label, fn) {
+  if (!btn || btn.disabled) return;
+  const prev = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = label;
+  try { return await fn(); } finally { btn.disabled = false; btn.textContent = prev; }
 }
 
 // ---- 지출/수입 추가/수정 시트 ----
@@ -446,16 +465,18 @@ $('en-start').onchange = () => { if ($('en-end').value < $('en-start').value) $(
 
 $('event-new-form').addEventListener('submit', async (e) => {
   e.preventDefault();
-  try {
-    await api('/events', {
-      method: 'POST',
-      body: { name: $('en-name').value, category: $('en-category').value, emoji: $('en-emoji').value || null, start_date: $('en-start').value, end_date: $('en-end').value },
-    });
-    $('event-new-dialog').close();
-    refresh();
-  } catch (err) {
-    $('en-error').textContent = err.message;
-  }
+  await withBusy($('event-new-form').querySelector('button[type=submit]'), '만드는 중…', async () => {
+    try {
+      await api('/events', {
+        method: 'POST',
+        body: { name: $('en-name').value, category: $('en-category').value, emoji: $('en-emoji').value || null, start_date: $('en-start').value, end_date: $('en-end').value },
+      });
+      $('event-new-dialog').close();
+      refresh();
+    } catch (err) {
+      $('en-error').textContent = err.message;
+    }
+  });
 });
 
 // 이벤트 이모티콘 입력칸: 값이 비어 있으면 이름/카테고리로 자동 추천한 이모티콘을 미리 보여줌
@@ -500,7 +521,7 @@ async function loadEvent(id) {
     }
     const left = el('div', 'left');
     left.append(el('div', 'name', r.item), el('div', 'cat', r.category));
-    wrap.append(itemRow('', left, amountEl(r), () => openForm(r, ev), () => deleteExpense(r), r.item, logoAvatarEl()));
+    wrap.append(itemRow('', left, amountEl(r), () => openForm(r, ev), (row) => deleteExpense(r, row), r.item, logoAvatarEl()));
   }
 }
 async function openEvent(id) {
@@ -518,17 +539,19 @@ $('ev-add').onclick = () => openForm(null, currentEvent);
 
 $('event-edit-form').addEventListener('submit', async (e) => {
   e.preventDefault();
-  try {
-    await api('/events/' + $('ev-id').value, {
-      method: 'PUT',
-      body: { name: $('ev-name').value, category: $('ev-category').value, emoji: $('ev-emoji').value || null, start_date: $('ev-start').value, end_date: $('ev-end').value },
-    });
-    $('ev-error').textContent = '';
-    await loadEvent($('ev-id').value);
-    refresh();
-  } catch (err) {
-    $('ev-error').textContent = err.message;
-  }
+  await withBusy($('event-edit-form').querySelector('button[type=submit]'), '저장 중…', async () => {
+    try {
+      await api('/events/' + $('ev-id').value, {
+        method: 'PUT',
+        body: { name: $('ev-name').value, category: $('ev-category').value, emoji: $('ev-emoji').value || null, start_date: $('ev-start').value, end_date: $('ev-end').value },
+      });
+      $('ev-error').textContent = '';
+      refresh(); // 목록 갱신과 이벤트 상세 갱신을 동시에
+      await loadEvent($('ev-id').value);
+    } catch (err) {
+      $('ev-error').textContent = err.message;
+    }
+  });
 });
 $('ev-start').onchange = () => { if ($('ev-end').value < $('ev-start').value) $('ev-end').value = $('ev-start').value; };
 
@@ -545,9 +568,9 @@ $('ev-delete').onclick = async () => {
 };
 
 // 지출 저장/삭제 후: 이벤트 상세가 열려 있으면 함께 갱신
-async function afterExpenseChange() {
+function afterExpenseChange() {
   $('expense-dialog').close();
-  if (currentEvent) await loadEvent(currentEvent.id).catch(() => {});
+  if (currentEvent) loadEvent(currentEvent.id).catch(() => {}); // 이벤트 상세가 열려 있으면 함께 갱신 (기다리지 않음)
   refresh();
 }
 
@@ -569,22 +592,26 @@ $('expense-form').addEventListener('submit', async (e) => {
     if (!Number.isInteger(day) || day < 1 || day > 31) { $('form-error').textContent = '반복 날짜는 1~31일로 입력하세요.'; return; }
     body.recurring = { interval_months: months, day_of_month: day };
   }
-  try {
-    await api(id ? '/expenses/' + id : '/expenses', { method: id ? 'PUT' : 'POST', body });
-    await afterExpenseChange();
-  } catch (err) {
-    $('form-error').textContent = err.message;
-  }
+  await withBusy($('f-submit'), '저장 중…', async () => {
+    try {
+      await api(id ? '/expenses/' + id : '/expenses', { method: id ? 'PUT' : 'POST', body });
+      afterExpenseChange();
+    } catch (err) {
+      $('form-error').textContent = err.message;
+    }
+  });
 });
 
 $('f-delete').onclick = async () => {
   if (!(await confirmDelete(formRow))) return;
-  try {
-    await api(deleteUrl(formRow), { method: 'DELETE' });
-    await afterExpenseChange();
-  } catch (err) {
-    $('form-error').textContent = err.message;
-  }
+  await withBusy($('f-delete'), '삭제 중…', async () => {
+    try {
+      await api(deleteUrl(formRow), { method: 'DELETE' });
+      afterExpenseChange();
+    } catch (err) {
+      $('form-error').textContent = err.message;
+    }
+  });
 };
 
 // ---- 카테고리 관리 시트 ----
