@@ -327,3 +327,5 @@ dialog:focus, dialog:focus-visible, #pick-list:focus, #pick-list:focus-visible {
 button:focus-visible { outline: 3px solid rgba(49, 130, 246, .35); outline-offset: 2px; }
 .cf-actions button:focus-visible { outline: none; }
 #login input { background: #fff; }
+.login-foot { margin: 20px 0 0; color: var(--muted); font-size: .85rem; line-height: 1.6; }
+.login-foot a { color: var(--text2); font-weight: 600; }

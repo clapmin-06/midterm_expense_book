@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>DonB 로고 H · 빗방울에서 원화로</title>
+<script src="./vendor/react.js"></script>
+<script src="./vendor/react-dom.js"></script>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700;800&amp;family=Outfit:wght@700;800&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#1B64DA}a:hover{color:#1957C2}
+</style>
+</helmet>
+<div style="width: 560px; height: 700px; box-sizing: border-box; padding: 40px; background: #F2F4F6; font-family: 'Noto Sans KR', sans-serif; color: #191F28; display: flex; flex-direction: column; gap: 24px">
+<div style="display: flex; align-items: center; gap: 12px; height: 28px">
+<span style="display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: 8px; background: {{accent}}; color: #FFFFFF; font-family: Outfit, sans-serif; font-weight: 800; font-size: 15px">H</span>
+<span style="font-size: 20px; font-weight: 800; letter-spacing: -0.02em">빗방울 → 원화</span>
+<span style="font-size: 14px; font-weight: 500; color: #5E6875">Drop to ₩</span>
+</div>
+<div style="height: 280px; border-radius: 28px; background: #FFFFFF; display: flex; align-items: center; justify-content: center">
+<dc-import name="Mark" concept="H" color="{{accent}}" knock="#FFFFFF" size="168" hint-size="168px,168px"></dc-import>
+</div>
+<div style="height: 112px; border-radius: 28px; background: #FFFFFF; box-sizing: border-box; padding: 0 32px; display: flex; align-items: center; justify-content: space-between">
+<div style="display: flex; align-items: center; gap: 10px">
+<dc-import name="Mark" concept="H" color="{{accent}}" knock="#FFFFFF" size="52" hint-size="52px,52px"></dc-import>
+<span style="font-family: Outfit, sans-serif; font-size: 44px; font-weight: 800; letter-spacing: -0.03em; line-height: 1; color: #191F28">Don<span style="color: {{accent}}">B</span></span>
+</div>
+<div style="display: flex; align-items: center; gap: 6px">
+<dc-import name="Mark" concept="H" color="{{accent}}" knock="#FFFFFF" size="30" hint-size="30px,30px"></dc-import>
+<span style="font-size: 26px; font-weight: 800; letter-spacing: -0.04em; line-height: 1; color: #191F28">돈비</span>
+</div>
+</div>
+<div style="height: 128px; border-radius: 28px; background: #FFFFFF; box-sizing: border-box; padding: 20px 28px; display: flex; align-items: flex-end; justify-content: space-between">
+<div style="display: flex; flex-direction: column; align-items: center; gap: 8px">
+<div style="width: 64px; height: 64px; border-radius: 18px; background: {{accent}}; display: flex; align-items: center; justify-content: center">
+<dc-import name="Mark" concept="H" color="#FFFFFF" knock="{{accent}}" size="42" hint-size="42px,42px"></dc-import>
+</div>
+<span style="font-size: 12px; font-weight: 500; color: #5E6875; line-height: 16px">앱 아이콘</span>
+</div>
+<div style="display: flex; flex-direction: column; align-items: center; gap: 8px">
+<div style="width: 64px; height: 64px; border-radius: 18px; background: #191F28; display: flex; align-items: center; justify-content: center">
+<dc-import name="Mark" concept="H" color="{{accent}}" knock="#191F28" size="42" hint-size="42px,42px"></dc-import>
+</div>
+<span style="font-size: 12px; font-weight: 500; color: #5E6875; line-height: 16px">다크 모드</span>
+</div>
+<div style="display: flex; flex-direction: column; align-items: center; gap: 8px">
+<div style="width: 64px; height: 64px; border-radius: 50%; background: {{tint}}; display: flex; align-items: center; justify-content: center">
+<dc-import name="Mark" concept="H" color="{{accent}}" knock="#FFFFFF" size="38" hint-size="38px,38px"></dc-import>
+</div>
+<span style="font-size: 12px; font-weight: 500; color: #5E6875; line-height: 16px">목록 64</span>
+</div>
+<div style="display: flex; flex-direction: column; align-items: center; gap: 8px">
+<div style="width: 40px; height: 40px; border-radius: 50%; background: {{tint}}; display: flex; align-items: center; justify-content: center">
+<dc-import name="Mark" concept="H" color="{{accent}}" knock="#FFFFFF" size="25" hint-size="25px,25px"></dc-import>
+</div>
+<span style="font-size: 12px; font-weight: 500; color: #5E6875; line-height: 16px">40</span>
+</div>
+<div style="display: flex; flex-direction: column; align-items: center; gap: 8px">
+<div style="width: 24px; height: 24px; border-radius: 50%; background: {{tint}}; display: flex; align-items: center; justify-content: center">
+<dc-import name="Mark" concept="H" color="{{accent}}" knock="#FFFFFF" size="17" hint-size="17px,17px"></dc-import>
+</div>
+<span style="font-size: 12px; font-weight: 500; color: #5E6875; line-height: 16px">24</span>
+</div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":"color","default":"#3182F6","options":["#3182F6","#1B64DA","#00A661","#191F28"]},"$preview":{"width":560,"height":700}}'>
+class Component extends DCLogic {
+renderVals() {
+const a = this.props.accent ?? '#3182F6';
+let h = String(a).replace('#', '');
+if (h.length === 3) { h = h.split('').map(function (c) { return c + c; }).join(''); }
+const n = parseInt(h.slice(0, 6), 16) || 0;
+const r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255;
+return { accent: a, tint: 'rgba(' + r + ',' + g + ',' + b + ',0.11)' };
+}
+}
+</script>
+</body>
+</html>

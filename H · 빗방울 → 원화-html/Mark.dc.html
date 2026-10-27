@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>DonB 마크</title>
+<script src="./vendor/react.js"></script>
+<script src="./vendor/react-dom.js"></script>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="width: {{sizePx}}; height: {{sizePx}}; color: {{color}}; display: flex; align-items: center; justify-content: center; flex-shrink: 0">
+<sc-if value="{{isA}}" hint-placeholder-val="{{ true }}">
+<svg viewBox="0 0 64 64" width="100%" height="100%" role="img" aria-label="DonB 로고" style="display: block">
+<path d="M32 6C25 16 14 27 14 38C14 47.9 22.1 56 32 56C41.9 56 50 47.9 50 38C50 27 39 16 32 6Z" fill="currentColor"></path>
+<path d="M23 33L27.5 47L32 37L36.5 47L41 33" fill="none" stroke="{{knock}}" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"></path>
+<path d="M21.5 40.5H42.5" fill="none" stroke="{{knock}}" stroke-width="3" stroke-linecap="round"></path>
+</svg>
+</sc-if>
+<sc-if value="{{isB}}" hint-placeholder-val="{{ false }}">
+<svg viewBox="0 0 64 64" width="100%" height="100%" role="img" aria-label="DonB 로고" style="display: block">
+<path d="M32 5.5V10" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round"></path>
+<path d="M8 34C8 20.7 18.7 10 32 10C45.3 10 56 20.7 56 34A10 10 0 0 0 40 34A10 10 0 0 0 24 34A10 10 0 0 0 8 34Z" fill="currentColor"></path>
+<path d="M32 30V48.5A5 5 0 0 1 22 48.5" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round"></path>
+<circle cx="45" cy="49" r="7.5" fill="currentColor"></circle>
+<circle cx="45" cy="49" r="4" fill="none" stroke="{{knock}}" stroke-width="1.8"></circle>
+</svg>
+</sc-if>
+<sc-if value="{{isC}}" hint-placeholder-val="{{ false }}">
+<svg viewBox="0 0 64 64" width="100%" height="100%" role="img" aria-label="DonB 로고" style="display: block">
+<path transform="translate(3.2 32.5) scale(0.32)" d="M18 0C11 10 0 21 0 32C0 41.9 8.1 50 18 50C27.9 50 36 41.9 36 32C36 21 25 10 18 0Z" fill="currentColor" fill-opacity="0.38"></path>
+<path transform="translate(17.2 24.5) scale(0.48)" d="M18 0C11 10 0 21 0 32C0 41.9 8.1 50 18 50C27.9 50 36 41.9 36 32C36 21 25 10 18 0Z" fill="currentColor" fill-opacity="0.68"></path>
+<path transform="translate(37 15.5) scale(0.66)" d="M18 0C11 10 0 21 0 32C0 41.9 8.1 50 18 50C27.9 50 36 41.9 36 32C36 21 25 10 18 0Z" fill="currentColor"></path>
+</svg>
+</sc-if>
+<sc-if value="{{isD}}" hint-placeholder-val="{{ false }}">
+<svg viewBox="0 0 64 64" width="100%" height="100%" role="img" aria-label="DonB 로고" style="display: block">
+<path fill-rule="evenodd" clip-rule="evenodd" d="M16 8H28C42.4 8 52 18.7 52 32C52 45.3 42.4 56 28 56H16C13.8 56 12 54.2 12 52V12C12 9.8 13.8 8 16 8ZM21 16H34C37.3 16 40 18.7 40 22C40 25.3 37.3 28 34 28H21ZM21 34H35C38.9 34 42 37.1 42 41C42 44.9 38.9 48 35 48H21Z" fill="currentColor"></path>
+</svg>
+</sc-if>
+<sc-if value="{{isE}}" hint-placeholder-val="{{ false }}">
+<svg viewBox="0 0 64 64" width="100%" height="100%" role="img" aria-label="DonB 로고" style="display: block">
+<path d="M10 13V51H21C31.5 51 39 42.5 39 32C39 21.5 31.5 13 21 13Z" fill="none" stroke="currentColor" stroke-opacity="0.42" stroke-width="6.5" stroke-linecap="round" stroke-linejoin="round"></path>
+<path d="M25 13H42.5C47 13 50.5 17 50.5 22.75C50.5 28.5 47 32.5 42.5 32.5H25M25 32.5H44.5C50 32.5 54 36.5 54 41.75C54 47 50 51 44.5 51H25V13" fill="none" stroke="currentColor" stroke-width="6.5" stroke-linecap="round" stroke-linejoin="round"></path>
+</svg>
+</sc-if>
+<sc-if value="{{isF}}" hint-placeholder-val="{{ false }}">
+<svg viewBox="0 0 64 64" width="100%" height="100%" role="img" aria-label="DonB 로고" style="display: block">
+<path d="M32 10V53" fill="none" stroke="currentColor" stroke-width="7" stroke-linecap="round"></path>
+<circle cx="21" cy="42" r="11" fill="none" stroke="currentColor" stroke-width="7"></circle>
+<circle cx="43" cy="42" r="11" fill="none" stroke="currentColor" stroke-width="7"></circle>
+</svg>
+</sc-if>
+<sc-if value="{{isG}}" hint-placeholder-val="{{ false }}">
+<svg viewBox="0 0 64 64" width="100%" height="100%" role="img" aria-label="DonB 로고" style="display: block">
+<circle cx="9.2" cy="41.8" r="6.2" fill="currentColor" fill-opacity="0.5"></circle>
+<circle cx="9.2" cy="41.8" r="3.7" fill="none" stroke="{{knock}}" stroke-width="1.3"></circle>
+<path d="M26.6 27.45C22.55 29.84 18 34.4 18 39.4C18 44.15 21.85 48 26.6 48C31.35 48 35.2 44.15 35.2 39.4C35.2 34.4 30.65 29.84 26.6 27.45Z" fill="currentColor" fill-opacity="0.75"></path>
+<circle cx="26.6" cy="40.2" r="4.4" fill="none" stroke="{{knock}}" stroke-width="1.3" stroke-opacity="0.55"></circle>
+<path d="M49.4 15.75C44.89 22.2 37.8 29.31 37.8 36.4C37.8 42.8 43 48 49.4 48C55.8 48 61 42.8 61 36.4C61 29.31 53.91 22.2 49.4 15.75Z" fill="currentColor"></path>
+</svg>
+</sc-if>
+<sc-if value="{{isH}}" hint-placeholder-val="{{ false }}">
+<svg viewBox="0 0 64 64" width="100%" height="100%" role="img" aria-label="DonB 로고" style="display: block">
+<circle cx="9.2" cy="41.8" r="6.2" fill="currentColor" fill-opacity="0.5"></circle>
+<path d="M6.3 39.2L7.75 44.4L9.2 40.6L10.65 44.4L12.1 39.2" fill="none" stroke="{{knock}}" stroke-width="1.15" stroke-linecap="round" stroke-linejoin="round"></path>
+<path d="M5.9 41.8H12.5" fill="none" stroke="{{knock}}" stroke-width="1" stroke-linecap="round"></path>
+<path d="M26.6 27.45C22.55 29.84 18 34.4 18 39.4C18 44.15 21.85 48 26.6 48C31.35 48 35.2 44.15 35.2 39.4C35.2 34.4 30.65 29.84 26.6 27.45Z" fill="currentColor" fill-opacity="0.75"></path>
+<path d="M49.4 15.75C44.89 22.2 37.8 29.31 37.8 36.4C37.8 42.8 43 48 49.4 48C55.8 48 61 42.8 61 36.4C61 29.31 53.91 22.2 49.4 15.75Z" fill="currentColor"></path>
+</svg>
+</sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"concept":{"editor":"enum","options":["A","B","C","D","E","F","G","H"],"default":"G"},"color":{"editor":"color","default":"#3182F6","options":["#3182F6","#1B64DA","#0B8A5A","#191F28"]},"knock":{"editor":"color","default":"#FFFFFF"},"size":{"editor":"int","default":240,"min":16,"max":800},"$preview":{"width":240,"height":240}}'>
+class Component extends DCLogic {
+renderVals() {
+const c = this.props.concept ?? 'G';
+const s = Number(this.props.size ?? 240) || 240;
+return {
+isA: c === 'A',
+isB: c === 'B',
+isC: c === 'C',
+isD: c === 'D',
+isE: c === 'E',
+isF: c === 'F',
+isG: c === 'G',
+isH: c === 'H',
+sizePx: s + 'px',
+color: this.props.color ?? '#3182F6',
+knock: this.props.knock ?? '#FFFFFF'
+};
+}
+}
+</script>
+</body>
+</html>
