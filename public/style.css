@@ -142,8 +142,9 @@ button.danger { background: var(--danger-weak); color: var(--danger); font-weigh
 .item-del:active { background: var(--danger-weak); color: var(--danger); }
 .avatar {
   flex: none; width: 44px; height: 44px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center;
-  font-size: 1.1rem; font-weight: 800;
+  background: rgba(49, 130, 246, .11); color: var(--primary); font-size: 1.2rem;
 }
+.avatar .mk { display: block; width: 28px; height: 28px; }
 .item .name { font-weight: 600; font-size: 1.05rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .item .cat { color: var(--muted); font-size: .86rem; margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .item .amt { font-variant-numeric: tabular-nums; font-weight: 700; font-size: 1.05rem; white-space: nowrap; }
@@ -329,3 +330,14 @@ button:focus-visible { outline: 3px solid rgba(49, 130, 246, .35); outline-offse
 #login input { background: #fff; }
 .login-foot { margin: 20px 0 0; color: var(--muted); font-size: .85rem; line-height: 1.6; }
 .login-foot a { color: var(--text2); font-weight: 600; }
+
+/* ----- 돈비 로고 (시안: 마크 + "돈비" / "DonB" 워드마크) ----- */
+.brand { display: flex; align-items: center; gap: 8px; margin: 0; font-size: 1.6rem; font-weight: 800; letter-spacing: -0.04em; line-height: 1; }
+.brand-mark { display: inline-flex; flex: none; width: 32px; height: 32px; color: var(--primary); }
+#login .login-brand { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; font-size: 1rem; }
+#login .login-brand .brand-mark { width: 56px; height: 56px; }
+/* 영문 워드마크 "DonB" (시안: Outfit 800, B만 파랑) */
+.wm { font-family: Outfit, "Pretendard Variable", sans-serif; font-weight: 800; letter-spacing: -0.03em; line-height: 1; color: var(--text); }
+.wm b { color: var(--primary); font-weight: 800; }
+.brand .wm { font-size: 1.9rem; }
+.login-brand .wm { font-size: 2.9rem; }

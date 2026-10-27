@@ -4,14 +4,20 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#f2f4f6">
-  <title>가계부</title>
+  <title>돈비 - 가계부</title>
+  <link rel="icon" type="image/svg+xml" href="/icons/donb-icon.svg">
+  <link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32.png">
+  <link rel="apple-touch-icon" href="/icons/apple-touch-icon-180.png">
+  <link rel="manifest" href="/manifest.webmanifest">
   <!-- 글꼴: Pretendard (불러오지 못하면 시스템 글꼴로 대체됨) -->
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
+  <!-- 로고 워드마크(DonB)용 글꼴 -->
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Outfit:wght@800&display=swap">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
   <section id="login" class="hidden">
-    <h1>가계부</h1>
+    <h1 class="login-brand" aria-label="돈비 DonB"><span class="brand-mark"></span><span class="wm">Don<b>B</b></span></h1>
     <p class="login-sub">내 가계부를 안전하게 기록해 보세요</p>
     <!-- 구글 로그인 (구글 브랜드 가이드에 맞춘 흰 버튼 + 컬러 G 로고) -->
     <a id="google-login" class="google-btn hidden" href="/api/auth/google">
@@ -35,7 +41,7 @@
 
   <div id="app" class="hidden">
     <header class="topbar">
-      <h1>가계부</h1>
+      <h1 class="brand" aria-label="돈비 DonB"><span class="brand-mark"></span><span class="wm">Don<b>B</b></span></h1>
       <div class="me-wrap">
         <span id="me" class="me hidden" title=""></span>
         <button id="logout" class="text-btn">로그아웃</button>

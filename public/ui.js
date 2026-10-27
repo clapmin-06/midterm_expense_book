@@ -2,6 +2,17 @@
 // app.js, stats.js 보다 먼저 로드된다. ($ 는 app.js 에도 정의되어 있어 여기서는 따로 사용)
 const byId = (id) => document.getElementById(id);
 
+// 돈비 로고 마크 (디자인 시안 "H · 빗방울 → 원화"의 도형 그대로). 색은 currentColor, ₩ 글자는 흰색
+const MARK_SVG =
+  '<svg viewBox="0 0 64 64" width="100%" height="100%" role="img" aria-label="돈비 로고" style="display:block">' +
+  '<circle cx="9.2" cy="41.8" r="6.2" fill="currentColor" fill-opacity="0.5"/>' +
+  '<path d="M6.3 39.2L7.75 44.4L9.2 40.6L10.65 44.4L12.1 39.2" fill="none" stroke="#fff" stroke-width="1.15" stroke-linecap="round" stroke-linejoin="round"/>' +
+  '<path d="M5.9 41.8H12.5" fill="none" stroke="#fff" stroke-width="1" stroke-linecap="round"/>' +
+  '<path d="M26.6 27.45C22.55 29.84 18 34.4 18 39.4C18 44.15 21.85 48 26.6 48C31.35 48 35.2 44.15 35.2 39.4C35.2 34.4 30.65 29.84 26.6 27.45Z" fill="currentColor" fill-opacity="0.75"/>' +
+  '<path d="M49.4 15.75C44.89 22.2 37.8 29.31 37.8 36.4C37.8 42.8 43 48 49.4 48C55.8 48 61 42.8 61 36.4C61 29.31 53.91 22.2 49.4 15.75Z" fill="currentColor"/>' +
+  '</svg>';
+document.querySelectorAll('.brand-mark').forEach((e) => { e.innerHTML = MARK_SVG; });
+
 // 확인창: 취소/확인 두 버튼. true(확인) / false(취소·바깥 클릭·Esc) 로 resolve
 function openConfirm({ title, message = '', okText = '확인', cancelText = '취소', danger = false, single = false }) {
   return new Promise((resolve) => {

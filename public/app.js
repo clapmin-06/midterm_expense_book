@@ -110,7 +110,7 @@ async function loadList() {
     const left = el('div', 'left');
     left.append(el('div', 'name', ev.name), el('div', 'cat', `${ev.category} · ${ev.start_date} ~ ${ev.end_date} · ${ev.count}건`));
     evBox.append(itemRow('event', left, el('div', 'amt' + (ev.total > 0 ? ' pos' : ''), signed(ev.total)),
-      () => openEvent(ev.id), () => deleteEvent(ev), ev.name, avatarEl('🧳', 0)));
+      () => openEvent(ev.id), () => deleteEvent(ev), ev.name, eventAvatarEl()));
   }
 
   let group = null;
@@ -138,7 +138,7 @@ async function loadList() {
     if (r.event_id) sub.append(el('span', 'ev-tag', `🧳 ${r.event_name}`));
     sub.append(r.category + (r.recurring_id ? ' · 정기' : ''));
     left.append(el('div', 'name', r.item), sub);
-    wrap.append(itemRow('', left, amountEl(r), () => (r.event_id ? openEventExpense(r) : openForm(r)), () => deleteExpense(r), r.item, avatarEl(r.category, r.kind)));
+    wrap.append(itemRow('', left, amountEl(r), () => (r.event_id ? openEventExpense(r) : openForm(r)), () => deleteExpense(r), r.item, logoAvatarEl()));
   }
 }
 
@@ -194,18 +194,17 @@ async function deleteEvent(ev) {
   }
 }
 
-// 카테고리 아이콘: 이름 첫 글자를 카테고리별로 정해진 파스텔 색 원 안에 표시
-const AVATAR_COLORS = [['#e8f3ff', '#1b64da'], ['#fff0e0', '#e8590c'], ['#e3faf0', '#0b8a5a'], ['#fff8db', '#b7791f'],
-  ['#ffeaf1', '#d6336c'], ['#f1ecff', '#6741d9'], ['#e3fafc', '#0b7285'], ['#ffe8e8', '#e03131']];
-function avatarEl(label, kind) {
-  const list = kind === 'income' ? catCache.income : catCache.expense;
-  let i = typeof kind === 'number' ? kind : list.indexOf(label);
-  if (i < 0) i = [...label].reduce((a, c) => a + c.charCodeAt(0), 0);
-  const [bg, fg] = AVATAR_COLORS[i % AVATAR_COLORS.length];
-  const a = el('span', 'avatar', [...label][0] || '·');
-  a.style.background = bg;
-  a.style.color = fg;
+// 목록의 그림 자리: 글자 대신 돈비 로고 마크를 연한 파랑 원 안에 표시 (시안의 "목록" 규격).
+// 이벤트는 🧳 로 구분
+function logoAvatarEl() {
+  const a = el('span', 'avatar');
+  const m = el('span', 'mk');
+  m.innerHTML = MARK_SVG;
+  a.append(m);
   return a;
+}
+function eventAvatarEl() {
+  return el('span', 'avatar ev', '🧳');
 }
 
 function amountEl(r) {
@@ -461,7 +460,7 @@ async function loadEvent(id) {
     }
     const left = el('div', 'left');
     left.append(el('div', 'name', r.item), el('div', 'cat', r.category));
-    wrap.append(itemRow('', left, amountEl(r), () => openForm(r, ev), () => deleteExpense(r), r.item, avatarEl(r.category, r.kind)));
+    wrap.append(itemRow('', left, amountEl(r), () => openForm(r, ev), () => deleteExpense(r), r.item, logoAvatarEl()));
   }
 }
 async function openEvent(id) {
